@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tetra Engine: Depth Gauge</title>
+<style>
+    body { margin: 0; padding: 0; background: #050505; color: #fff;
+           font-family: 'Segoe UI', monospace; overflow: hidden;
+           height: 100vh; display: flex; flex-direction: column; }
+
+    header { height: 40px; background: #111; border-bottom: 1px solid #333;
+             display: flex; align-items: center; justify-content: space-between;
+             padding: 0 20px; flex-shrink: 0; }
+    h1 { font-size: 14px; margin: 0; color: #e8e8ff; letter-spacing: 1px;
+         text-transform: uppercase; }
+    .tag { background: #101a2a; padding: 2px 6px; border-radius: 4px;
+           font-size: 10px; color: #8fb8ff; border: 1px solid #2e4a75;
+           white-space: nowrap; }
+
+    #stage { flex: 1; display: flex; position: relative; min-height: 0; }
+    .panel { flex: 1; position: relative; min-width: 0; min-height: 0; }
+    .panel + .panel { border-left: 1px solid #222; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none;
+             cursor: grab; }
+    .panel-cap { position: absolute; top: 8px; left: 10px; z-index: 5;
+        font-family: monospace; font-size: 11px; color: #888;
+        background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 3px;
+        border: 1px solid #333; pointer-events: none; letter-spacing: 1px; }
+    .panel-cap b { color: #ddd; }
+
+    .overlay-info { position: absolute; top: 34px; left: 10px; z-index: 10;
+        background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 4px;
+        border: 1px solid #444; pointer-events: none; font-family: monospace;
+        font-size: 11px; line-height: 1.7; max-width: 340px; }
+    .dim { color: #888; }
+    .c1  { color: #ffd9a0; }
+    .c2  { color: #a0ffb0; }
+    .cP  { color: #d0a8ff; }
+    #drift { color: #6fdc8c; font-weight: bold; }
+    #round { color: #ff9d6b; }
+
+    #panel { position: absolute; bottom: 10px; left: 50%;
+        transform: translateX(-50%); z-index: 10; width: min(560px, 94vw);
+        background: rgba(10,10,15,0.92); border: 1px solid #333;
+        border-radius: 4px; padding: 10px 14px; font-family: monospace; }
+    #panel label { display: flex; justify-content: space-between;
+        font-size: 11px; color: #888; margin-bottom: 2px; }
+    #panel input[type=range] { width: 100%; accent-color: #8fb8ff; }
+    .btn-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;
+        justify-content: center; }
+    button { background: #1a1a22; color: #ccc; border: 1px solid #444;
+        border-radius: 4px; font-family: monospace; font-size: 11px;
+        padding: 5px 10px; cursor: pointer; }
+    button.active { background: #14202e; color: #8fb8ff; border-color: #3d6aa3; }
+    button:focus-visible { outline: 2px solid #8fb8ff; }
+
+    @media (max-width: 700px), (orientation: portrait) {
+        #stage { flex-direction: column; }
+        .panel + .panel { border-left: none; border-top: 1px solid #222; }
+        .overlay-info { font-size: 10px; line-height: 1.5; max-width: 270px; }
+        h1 { font-size: 11px; }
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Depth Gauge <span style="color:#666">//</span> Theorem 5.3</h1>
+    <div class="tag">THE COORDINATE THE IMAGE CANNOT SEE</div>
+</header>
+
+<div id="stage">
+    <div class="panel">
+        <canvas id="cv3d"></canvas>
+        <div class="panel-cap"><b>SCENE</b> &mdash; the gauge slides every point
+             along its own ray</div>
+        <div class="overlay-info">
+            <div><span class="dim">gauge g =</span> <span id="gval">1.000</span></div>
+            <div><span class="dim">P:</span> z = <span id="z0" class="cP">350.0</span>
+                 &rarr; <span id="z1" class="cP">350.0</span>
+                 <span class="dim">(&Delta;z</span> <span id="dz">+0.0</span><span class="dim">)</span></div>
+            <div><span class="dim">AR(P) =</span> <span id="ar0">0.300</span>
+                 &rarr; <span id="ar1">0.300</span>
+                 <span class="dim">&mdash; depth moved</span></div>
+            <div><span class="dim">image drift =</span>
+                 <span id="drift">0 px</span></div>
+            <div id="roundrow" style="display:none">
+                <span class="dim">target roundness (max/min r) =</span>
+                <span id="round">1.000</span></div>
+            <div class="dim" style="font-size:10px; margin-top:4px" id="hint">
+                The gauge fixes both slits pointwise, so every ray maps to
+                itself &mdash; points just slide along their threads.<br>
+                The projection reads only the address: the image is frozen.<br>
+                Depth is precisely the coordinate this group moves.
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <canvas id="cvim"></canvas>
+        <div class="panel-cap"><b>IMAGE</b> &mdash; frozen: the projection of the
+             deforming scene</div>
+    </div>
+
+    <div id="panel">
+        <label><span>gauge g (the depth slider the image cannot feel)</span>
+               <span id="glab">1.000</span></label>
+        <input type="range" id="gslide" min="0.75" max="1.30" step="0.005" value="1.0">
+        <div class="btn-row">
+            <button id="bcube" class="active">Cube</button>
+            <button id="btarget">Target</button>
+            <button id="bworld" class="active">Worldlines</button>
+            <button id="banim" class="active">Animate</button>
+            <button id="blabels" class="active">Labels</button>
+            <button id="breset">Reset</button>
+        </div>
+    </div>
+</div>
+
+<script>
+"use strict";
+// ================================================================ RIG
+const Zv = 150, Zh = 250, D = Zh - Zv;
+const SLIT_HALF = 170, SCR_HALF = 140;
+
+// ================================================================ MATH
+function toScreen(P) {
+    return [ -P[0]*Zv/(P[2] - Zv), -P[1]*Zh/(P[2] - Zh) ];
+}
+function threadAt(P, z) {
+    return [ P[0]*(z - Zv)/(P[2] - Zv), P[1]*(z - Zh)/(P[2] - Zh), z ];
+}
+// THE GAUGE (Thm 5.3): the kernel of G's action on ray space.
+// In homogeneous coordinates it is lambda*id on the plane of l1 and
+// mu*id on the plane of l2 (g = lambda/mu).  Dehomogenized in the rig:
+function gauge(P, g) {
+    const b = (Zh - P[2])/D, d = (P[2] - Zv)/D;   // barycentric in depth
+    const W = g*b + d;
+    return [ P[0]/W, g*P[1]/W,
+             (g*Zv*(Zh - P[2]) + Zh*(P[2] - Zv)) / (D*W) ];
+}
+function arOf(z) { return (Zv/(z - Zv)) / (Zh/(z - Zh)); }
+
+// ================================================================ STATE
+let g = 1.0, obj = "cube";
+let showWorld = true, showLabels = true, animate = true;
+let t0 = performance.now();
+const slowMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const A = [20, -40];                         // address of the highlighted ray
+const PZ0 = 350;                             // rest depth of P
+const C = { yaw: -0.62, pitch: 0.30, dist: 820, fl: 640,
+            tx: 0, ty: 0, tz: 210 };
+
+// the highlighted point P at rest (on ray A at depth PZ0)
+function restP() {
+    const lam = (PZ0 - Zv)/D;
+    return [ A[1]*lam, A[0]*(1 - lam), PZ0 ];
+}
+// ---- objects (rest positions)
+function cubePoints() {
+    const xs = [-45, 15], ys = [-35, 25], zs = [305, 355];
+    const V = [];
+    for (const x of xs) for (const y of ys) for (const z of zs)
+        V.push([x, y, z]);
+    const E = [[0,1],[2,3],[4,5],[6,7],[0,2],[1,3],[4,6],[5,7],
+               [0,4],[1,5],[2,6],[3,7]];
+    return { V, E };
+}
+function targetPoints() {
+    const Pc = restP(), pts = [];
+    for (let i = 0; i <= 48; i++) {
+        const th = i/48 * 6.2832;
+        pts.push([ Pc[0] + 16*Math.cos(th), Pc[1] + 16*Math.sin(th), Pc[2] ]);
+    }
+    return { center: Pc, rim: pts };
+}
+const CUBE = cubePoints();
+
+// ================================================================ 3D PANEL
+const cv3 = document.getElementById("cv3d");
+const c3 = cv3.getContext("2d");
+let W3 = 0, H3 = 0;
+function rot(p) {
+    const x = p[0]-C.tx, y = p[1]-C.ty, z = p[2]-C.tz;
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    const x1 =  cy*x + sy*z, z1 = -sy*x + cy*z;
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    return [x1, cp*y - sp*z1, sp*y + cp*z1];
+}
+function proj(p) {
+    const v = rot(p), zc = v[2] + C.dist;
+    const f = C.fl / Math.max(zc, 12);
+    return [W3/2 + v[0]*f, H3/2 - v[1]*f, zc];
+}
+function line3(a, b, color, width, alpha, dash) {
+    const P = proj(a), Q = proj(b);
+    c3.save(); c3.globalAlpha = alpha === undefined ? 1 : alpha;
+    c3.strokeStyle = color; c3.lineWidth = width || 1;
+    if (dash) c3.setLineDash(dash);
+    c3.beginPath(); c3.moveTo(P[0],P[1]); c3.lineTo(Q[0],Q[1]); c3.stroke();
+    c3.restore();
+}
+function path3(pts, color, width, alpha) {
+    c3.save(); c3.globalAlpha = alpha === undefined ? 1 : alpha;
+    c3.strokeStyle = color; c3.lineWidth = width || 1;
+    c3.beginPath();
+    pts.forEach((p, i) => { const q = proj(p);
+        i ? c3.lineTo(q[0],q[1]) : c3.moveTo(q[0],q[1]); });
+    c3.stroke(); c3.restore();
+}
+function poly3(pts, fill, alpha) {
+    c3.save(); c3.globalAlpha = alpha; c3.fillStyle = fill;
+    c3.beginPath();
+    pts.forEach((p, i) => { const q = proj(p);
+        i ? c3.lineTo(q[0],q[1]) : c3.moveTo(q[0],q[1]); });
+    c3.closePath(); c3.fill(); c3.restore();
+}
+function dot3(p, color, r, glow) {
+    const q = proj(p);
+    c3.save();
+    if (glow) { c3.shadowColor = color; c3.shadowBlur = 12; }
+    c3.fillStyle = color;
+    c3.beginPath(); c3.arc(q[0], q[1], r, 0, 6.2832); c3.fill();
+    c3.restore();
+    return q;
+}
+function label3(p, text, color, dx, dy) {
+    if (!showLabels) return;
+    const q = proj(p);
+    c3.save(); c3.font = "11px monospace"; c3.fillStyle = color;
+    c3.globalAlpha = 0.95;
+    c3.fillText(text, q[0]+(dx||8), q[1]+(dy||-8));
+    c3.restore();
+}
+function drawScreen3() {
+    const s = SCR_HALF, n = 8;
+    poly3([[-s,-s,0],[s,-s,0],[s,s,0],[-s,s,0]], "#0d1420", 0.55);
+    for (let i = -n; i <= n; i++) {
+        const al = i === 0 ? 0.30 : 0.12, k = s*i/n;
+        line3([k,-s,0],[k,s,0], "#3a5a80", 1, al);
+        line3([-s,k,0],[s,k,0], "#3a5a80", 1, al);
+    }
+    label3([-s, s, 0], "screen \u03a0", "#7fd4ff", 4, -6);
+}
+function drawSlits3() {
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 2.5, 1);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 2.5, 1);
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 9, 0.10);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 9, 0.10);
+    label3([0, SLIT_HALF, Zv], "\u2113\u2081 (fixed pointwise)", "#ffd9a0");
+    label3([SLIT_HALF, 0, Zh], "\u2113\u2082 (fixed pointwise)", "#a0ffb0", -140, -10);
+}
+function drawWorldline(P) {              // the ray a rest-point slides along
+    path3([threadAt(P,-10), threadAt(P,Zv), threadAt(P,Zh),
+           threadAt(P, 640)], "#8fa3c0", 1, 0.20);
+}
+function drawObject3() {
+    if (obj === "cube") {
+        if (showWorld) CUBE.V.forEach(drawWorldline);
+        // rest ghost
+        for (const [i,j] of CUBE.E)
+            line3(CUBE.V[i], CUBE.V[j], "#8fb8ff", 1, 0.18);
+        // gauged cube (projective map: edges stay straight in space)
+        const GV = CUBE.V.map((v) => gauge(v, g));
+        for (const [i,j] of GV.map((_,k)=>k).length ? CUBE.E : [])
+            line3(GV[i], GV[j], "#8fb8ff", 2, 0.95);
+        GV.forEach((v) => dot3(v, "#8fb8ff", 3, true));
+    } else {
+        const T = targetPoints();
+        if (showWorld) {
+            drawWorldline(T.center);
+            for (let k = 0; k < 48; k += 8) drawWorldline(T.rim[k]);
+        }
+        path3(T.rim, "#8fb8ff", 1, 0.18);
+        const GR = T.rim.map((v) => gauge(v, g));
+        path3(GR, "#8fb8ff", 2, 0.95);
+        dot3(gauge(T.center, g), "#8fb8ff", 3, true);
+    }
+    // the highlighted point P, riding its bright ray
+    const P0 = restP(), P1 = gauge(P0, g);
+    line3(threadAt(P0,-10), threadAt(P0,640), "#ffffff", 1.4, 0.7);
+    dot3(threadAt(P0,Zv), "#ffd9a0", 4, true);
+    dot3(threadAt(P0,Zh), "#a0ffb0", 4, true);
+    dot3(threadAt(P0,0), "#7fd4ff", 4, true);
+    dot3(P0, "#8fa3c0", 3, false);
+    const q = dot3(P1, "#d0a8ff", 7, true);
+    c3.save(); c3.strokeStyle = "#d0a8ff"; c3.globalAlpha = 0.5;
+    c3.beginPath(); c3.arc(q[0], q[1], 12, 0, 6.2832); c3.stroke(); c3.restore();
+    label3(P1, "P", "#d0a8ff", 14, 4);
+}
+
+// ================================================================ IMAGE PANEL
+const cvI = document.getElementById("cvim");
+const cI = cvI.getContext("2d");
+let WI = 0, HI = 0;
+const chart = { x0: 0, y0: 0, size: 0 };
+function imLayout() {
+    const m = 40;
+    chart.size = Math.min(WI, HI) - 2*m;
+    chart.x0 = (WI - chart.size)/2;
+    chart.y0 = (HI - chart.size)/2;
+}
+function imX(x) { return chart.x0 + (x + SCR_HALF)/(2*SCR_HALF)*chart.size; }
+function imY(y) { return chart.y0 + (SCR_HALF - y)/(2*SCR_HALF)*chart.size; }
+function imPath(pts3, color, width, alpha) {
+    cI.save(); cI.globalAlpha = alpha === undefined ? 1 : alpha;
+    cI.strokeStyle = color; cI.lineWidth = width;
+    cI.beginPath(); let first = true;
+    for (const p of pts3) {
+        const s = toScreen(p);
+        if (Math.abs(s[0]) > SCR_HALF*1.3 || Math.abs(s[1]) > SCR_HALF*1.3) {
+            first = true; continue;
+        }
+        first ? cI.moveTo(imX(s[0]), imY(s[1])) : cI.lineTo(imX(s[0]), imY(s[1]));
+        first = false;
+    }
+    cI.stroke(); cI.restore();
+}
+function edgeSamples(a, b, n) {
+    const out = [];
+    for (let i = 0; i <= n; i++) {
+        const u = i/n;
+        out.push([ a[0]+u*(b[0]-a[0]), a[1]+u*(b[1]-a[1]), a[2]+u*(b[2]-a[2]) ]);
+    }
+    return out;
+}
+function drawImage(drift) {
+    cI.clearRect(0, 0, WI, HI);
+    cI.fillStyle = "#050505"; cI.fillRect(0, 0, WI, HI);
+    imLayout();
+    const n = 8;
+    for (let i = 0; i <= n; i++) {
+        const k = chart.x0 + chart.size*i/n, l = chart.y0 + chart.size*i/n;
+        cI.strokeStyle = "#3a5a80"; cI.globalAlpha = i === n/2 ? 0.3 : 0.12;
+        cI.beginPath(); cI.moveTo(k, chart.y0);
+        cI.lineTo(k, chart.y0+chart.size); cI.stroke();
+        cI.beginPath(); cI.moveTo(chart.x0, l);
+        cI.lineTo(chart.x0+chart.size, l); cI.stroke();
+    }
+    cI.globalAlpha = 1;
+    cI.strokeStyle = "#444";
+    cI.strokeRect(chart.x0, chart.y0, chart.size, chart.size);
+    cI.save(); cI.beginPath();
+    cI.rect(chart.x0, chart.y0, chart.size, chart.size); cI.clip();
+    // ghost: image of the REST scene (white).  live: image of the GAUGED
+    // scene (cyan).  They coincide to machine precision — that is the point.
+    if (obj === "cube") {
+        for (const [i,j] of CUBE.E) {
+            const S = edgeSamples(CUBE.V[i], CUBE.V[j], 24);
+            imPath(S, "#ffffff", 3.5, 0.25);
+            imPath(S.map((p) => gauge(p, g)), "#8fb8ff", 1.6, 0.95);
+        }
+    } else {
+        const T = targetPoints();
+        imPath(T.rim, "#ffffff", 3.5, 0.25);
+        imPath(T.rim.map((p) => gauge(p, g)), "#8fb8ff", 1.6, 0.95);
+    }
+    // P's image point
+    const s = toScreen(gauge(restP(), g));
+    cI.save(); cI.shadowColor = "#d0a8ff"; cI.shadowBlur = 10;
+    cI.fillStyle = "#d0a8ff";
+    cI.beginPath(); cI.arc(imX(s[0]), imY(s[1]), 4, 0, 6.2832); cI.fill();
+    cI.restore();
+    cI.restore();
+    if (showLabels) {
+        cI.font = "11px monospace"; cI.fillStyle = "#6fdc8c";
+        cI.fillText("IMAGE FROZEN \u00b7 drift " + drift.toExponential(0) + " px",
+                    chart.x0 + 8, chart.y0 + chart.size - 10);
+        cI.fillStyle = "#666";
+        cI.fillText("(white ghost = rest image, cyan = gauged image)",
+                    chart.x0 + 8, chart.y0 + 16);
+    }
+}
+
+// ================================================================ METRICS
+function sceneSamplePoints() {
+    if (obj === "cube") return CUBE.V;
+    const T = targetPoints();
+    return [T.center, ...T.rim.filter((_, i) => i % 6 === 0)];
+}
+function imageDrift() {
+    let w = 0;
+    for (const P of sceneSamplePoints()) {
+        const a = toScreen(P), b = toScreen(gauge(P, g));
+        w = Math.max(w, Math.hypot(a[0]-b[0], a[1]-b[1]));
+    }
+    return w;
+}
+function roundness() {          // the price of depth: circles stop being circles
+    const T = targetPoints();
+    const Gc = gauge(T.center, g);
+    let mn = Infinity, mx = 0;
+    for (let k = 0; k < 48; k += 2) {
+        const p = gauge(T.rim[k], g);
+        const r = Math.hypot(p[0]-Gc[0], p[1]-Gc[1], p[2]-Gc[2]);
+        mn = Math.min(mn, r); mx = Math.max(mx, r);
+    }
+    return mx/mn;
+}
+
+// ================================================================ HUD
+const el = (id) => document.getElementById(id);
+function updateHUD(drift) {
+    const P1 = gauge(restP(), g);
+    el("gval").textContent = g.toFixed(3);
+    el("glab").textContent = g.toFixed(3);
+    el("z0").textContent = PZ0.toFixed(1);
+    el("z1").textContent = P1[2].toFixed(1);
+    const dz = P1[2] - PZ0;
+    el("dz").textContent = (dz >= 0 ? "+" : "") + dz.toFixed(1);
+    el("ar0").textContent = arOf(PZ0).toFixed(3);
+    el("ar1").textContent = arOf(P1[2]).toFixed(3);
+    el("drift").textContent = drift.toExponential(0) + " px";
+    el("roundrow").style.display = obj === "target" ? "" : "none";
+    if (obj === "target") el("round").textContent = roundness().toFixed(3);
+    el("hint").innerHTML = obj === "target"
+        ? "The gauged circle is at a new depth and the image has not " +
+          "moved \u2014 but the circle is no longer round.<br>" +
+          "The codec escapes the gauge by ASSUMING round targets:<br>" +
+          "AR reads depth only because shape is pinned (Thm 7)."
+        : "The gauge fixes both slits pointwise, so every ray maps to " +
+          "itself \u2014 points just slide along their threads.<br>" +
+          "The projection reads only the address: the image is frozen.<br>" +
+          "Depth is precisely the coordinate this group moves.";
+}
+
+// ================================================================ LOOP
+function frame(now) {
+    if (animate) {
+        const sp = slowMotion ? 0.00025 : 0.0009;
+        g = 1.025 + 0.275*Math.sin((now - t0)*sp);
+        el("gslide").value = g.toFixed(3);
+    }
+    c3.clearRect(0, 0, W3, H3);
+    c3.fillStyle = "#050505"; c3.fillRect(0, 0, W3, H3);
+    drawScreen3();
+    drawSlits3();
+    drawObject3();
+    const drift = imageDrift();
+    drawImage(drift);
+    updateHUD(drift);
+    requestAnimationFrame(frame);
+}
+
+// ================================================================ INPUT
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W3 = cv3.clientWidth; H3 = cv3.clientHeight;
+    cv3.width = W3*dpr; cv3.height = H3*dpr; c3.setTransform(dpr,0,0,dpr,0,0);
+    WI = cvI.clientWidth; HI = cvI.clientHeight;
+    cvI.width = WI*dpr; cvI.height = HI*dpr; cI.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener("resize", resize);
+let drag3 = null;
+cv3.addEventListener("pointerdown", (e) => {
+    cv3.setPointerCapture(e.pointerId);
+    const r = cv3.getBoundingClientRect();
+    drag3 = { x: e.clientX - r.left, y: e.clientY - r.top,
+              yaw: C.yaw, pitch: C.pitch };
+});
+cv3.addEventListener("pointermove", (e) => {
+    if (!drag3) return;
+    const r = cv3.getBoundingClientRect();
+    C.yaw   = drag3.yaw   + ((e.clientX - r.left) - drag3.x) * 0.006;
+    C.pitch = Math.min(1.35, Math.max(-1.35,
+              drag3.pitch + ((e.clientY - r.top) - drag3.y) * 0.006));
+});
+window.addEventListener("pointerup", () => { drag3 = null; });
+cv3.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    C.dist = Math.min(1700, Math.max(320, C.dist * (1 + e.deltaY * 0.001)));
+}, { passive: false });
+let pinchD = 0;
+cv3.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                             e.touches[0].clientY - e.touches[1].clientY);
+        if (pinchD) C.dist = Math.min(1700, Math.max(320, C.dist * pinchD / d));
+        pinchD = d;
+    }
+}, { passive: true });
+cv3.addEventListener("touchend", () => { pinchD = 0; });
+
+// ================================================================ CONTROLS
+el("gslide").addEventListener("input", (e) => {
+    g = +e.target.value;
+    animate = false; el("banim").classList.remove("active");
+});
+el("bcube").addEventListener("click", () => {
+    obj = "cube";
+    el("bcube").classList.add("active"); el("btarget").classList.remove("active");
+});
+el("btarget").addEventListener("click", () => {
+    obj = "target";
+    el("btarget").classList.add("active"); el("bcube").classList.remove("active");
+});
+el("bworld").addEventListener("click", (e) => {
+    showWorld = !showWorld; e.target.classList.toggle("active", showWorld);
+});
+el("banim").addEventListener("click", (e) => {
+    animate = !animate; e.target.classList.toggle("active", animate);
+    if (animate) t0 = performance.now() - Math.asin((g - 1.025)/0.275) /
+        (slowMotion ? 0.00025 : 0.0009);
+});
+el("blabels").addEventListener("click", (e) => {
+    showLabels = !showLabels; e.target.classList.toggle("active", showLabels);
+});
+el("breset").addEventListener("click", () => {
+    g = 1.0; el("gslide").value = "1.0";
+    C.yaw = -0.62; C.pitch = 0.30; C.dist = 820;
+    animate = true; el("banim").classList.add("active");
+    t0 = performance.now();
+});
+
+// ================================================================ GO
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
