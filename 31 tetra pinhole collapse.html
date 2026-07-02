@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tetra Engine: Pinhole Collapse</title>
+<style>
+    body { margin: 0; padding: 0; background: #050505; color: #fff;
+           font-family: 'Segoe UI', monospace; overflow: hidden;
+           height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+
+    header { height: 40px; background: #111; border-bottom: 1px solid #333;
+             display: flex; align-items: center; justify-content: space-between;
+             padding: 0 20px; flex-shrink: 0; }
+    h1 { font-size: 14px; margin: 0; color: #e8e8ff; letter-spacing: 1px;
+         text-transform: uppercase; }
+    .tag { background: #1f1428; padding: 2px 6px; border-radius: 4px;
+           font-size: 10px; color: #cf9bff; border: 1px solid #6b3d99;
+           white-space: nowrap; }
+
+    #stage { flex: 1; display: flex; position: relative; min-height: 0; }
+    .panel { flex: 1; position: relative; min-width: 0; min-height: 0; }
+    .panel + .panel { border-left: 1px solid #222; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none;
+             cursor: grab; }
+    .panel-cap { position: absolute; top: 8px; left: 10px; z-index: 5;
+        font-family: monospace; font-size: 11px; color: #888;
+        background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 3px;
+        border: 1px solid #333; pointer-events: none; letter-spacing: 1px; }
+    .panel-cap b { color: #ddd; }
+
+    .overlay-info { position: absolute; top: 34px; left: 10px; z-index: 10;
+        background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 4px;
+        border: 1px solid #444; pointer-events: none; font-family: monospace;
+        font-size: 11px; line-height: 1.7; max-width: 340px; }
+    .dim { color: #888; }
+    .c1  { color: #ffd9a0; }
+    .c2  { color: #a0ffb0; }
+    #mode.xs { color: #ffd24a; font-weight: bold; }
+    #mode.ph { color: #66ccff; font-weight: bold; }
+    #fuse { color: #cf9bff; }
+
+    #panel { position: absolute; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 50%;
+        transform: translateX(-50%); z-index: 10; width: min(560px, 94vw);
+        background: rgba(10,10,15,0.92); border: 1px solid #333;
+        border-radius: 4px; padding: 10px 14px; font-family: monospace; }
+    #panel label { display: flex; justify-content: space-between;
+        font-size: 11px; color: #888; margin-bottom: 2px; }
+    #panel input[type=range] { width: 100%; accent-color: #cf9bff; }
+    .btn-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;
+        justify-content: center; }
+    button { background: #1a1a22; color: #ccc; border: 1px solid #444;
+        border-radius: 4px; font-family: monospace; font-size: 11px;
+        padding: 5px 10px; cursor: pointer; }
+    button.active { background: #241a30; color: #cf9bff; border-color: #8a5cc0; }
+    button:focus-visible { outline: 2px solid #cf9bff; }
+
+    @media (max-width: 700px), (orientation: portrait) {
+        #stage { flex-direction: column; }
+        .panel + .panel { border-left: none; border-top: 1px solid #222; }
+        .overlay-info { font-size: 10px; line-height: 1.5; max-width: 270px; }
+        h1 { font-size: 11px; }
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Pinhole Collapse <span style="color:#666">//</span> Theorem 8</h1>
+    <div class="tag">P&sup1;&times;P&sup1; &rarr; P&sup2;</div>
+</header>
+
+<div id="stage">
+    <div class="panel">
+        <canvas id="cv3d"></canvas>
+        <div class="panel-cap"><b>SPACE</b> &mdash; the slit pair loses its skewness</div>
+        <div class="overlay-info">
+            <div><span class="dim">separation h =</span> <span id="hval">100.0</span>
+                 &nbsp;<span class="dim">(Zh = Zv + h)</span></div>
+            <div><span class="dim">mode:</span> <span id="mode" class="xs">CROSS-SLIT</span></div>
+            <div><span class="dim">chain bow of m =</span> <span id="bow">0</span>
+                 &nbsp;<span class="dim">|c| &prop; h:</span> <span id="cval">0</span></div>
+            <div><span class="dim">&lambda; =</span> <span id="lam" class="c1">0</span>
+                 &nbsp;<span class="dim">&micro; =</span> <span id="mu" class="c2">0</span></div>
+            <div><span class="dim">|&lambda; &minus; &micro;| =</span>
+                 <span id="fuse">0</span>
+                 &nbsp;<span class="dim" id="fusenote"></span></div>
+            <div><span class="dim">min pairwise ray gap =</span>
+                 <span id="gap">0</span></div>
+            <div class="dim" style="font-size:10px; margin-top:4px" id="hint">
+                Shrink h: the slits meet at O, non-concurrence fails there,
+                and the bundle re-forms &mdash; a pinhole.<br>
+                The chain straightens (c = Dz&middot;h) and, for rays coplanar
+                with O, the two cross-ratios fuse into one.
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <canvas id="cvim"></canvas>
+        <div class="panel-cap"><b>IMAGE + INVARIANTS</b> &mdash; the bow and the
+             defect both die linearly in h</div>
+    </div>
+
+    <div id="panel">
+        <label><span>slit separation h (log scale)</span>
+               <span id="hlab">100.0</span></label>
+        <input type="range" id="hslide" min="-0.301" max="2" step="0.005" value="2">
+        <div class="btn-row">
+            <button id="bcollapse">Collapse</button>
+            <button id="bcopl" class="active">Coplanar with O</button>
+            <button id="bgen">Generic points</button>
+            <button id="blabels" class="active">Labels</button>
+            <button id="breset">Reset</button>
+        </div>
+    </div>
+</div>
+
+<script>
+"use strict";
+// ================================================================ RIG
+// Zv fixed; Zh = Zv + h walks toward it.  At h = 0 the slits meet at
+// O = (0, 0, Zv): the first row of the Degeneration Table becomes the second.
+const Zv = 150;
+let h = 100;
+const Zh = () => Zv + h;
+const SLIT_HALF = 170, SCR_HALF = 140;
+const H_MIN = 0.5, H_MAX = 100;
+
+// ================================================================ MATH
+function toScreen(P) {
+    return [ -P[0]*Zv/(P[2] - Zv), -P[1]*Zh()/(P[2] - Zh()) ];
+}
+function addressOf(P) {          // thread P, read its feet
+    return [ P[1]*(Zv - Zh())/(P[2] - Zh()),      // s on l1
+             P[0]*(Zh() - Zv)/(P[2] - Zv) ];      // t on l2
+}
+function rayAt(a, z) {           // ray of address a at the CURRENT separation
+    const lam = (z - Zv)/h;
+    return [ a[1]*lam, a[0]*(1 - lam), z ];
+}
+function rayDir(a) { return [a[1], -a[0], h]; }
+function rayDistance(a, b) {     // C2 gap at the current separation
+    const p = [0, a[0]-b[0], 0];
+    const u = rayDir(a), v = rayDir(b);
+    const c = [ u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0] ];
+    const n = Math.hypot(c[0], c[1], c[2]);
+    if (n < 1e-12) return 0;
+    return Math.abs(p[0]*c[0]+p[1]*c[1]+p[2]*c[2]) / n;
+}
+function crossRatio(A, B, Cc, Dd) {
+    return ((Cc - A)*(Dd - B)) / ((Cc - B)*(Dd - A));
+}
+// exact chain coefficients of a line (demo 28, with Zh live):
+function chainCoeffs(E1, E2) {
+    const ZH = Zh();
+    const Dx = E2[0]-E1[0], Dy = E2[1]-E1[1], Dz = E2[2]-E1[2];
+    const p1 = -Dx*Zv, p0 = -E1[0]*Zv, q1 = Dz, q0 = E1[2]-Zv;
+    const r1 = -Dy*ZH, r0 = -E1[1]*ZH, s1 = Dz, s0 = E1[2]-ZH;
+    return { a: r1*q0 - r0*q1, b: r0*p1 - r1*p0,
+             c: s1*q0 - s0*q1, d: s0*p1 - s1*p0 };      // c = Dz*h
+}
+function mobius(M, x) { return (M.a*x + M.b)/(M.c*x + M.d); }
+
+// ================================================================ SCENE DATA
+// test line m (fixed in space): its chain bows, then straightens
+const E1 = [-70, -20, 310], E2 = [80, 30, 420];
+// four scene points on a plane through O = (0,0,Zv): Y = X + 0.2(Z - Zv).
+// Rays through 4 points coplanar with the limiting pinhole fuse: lambda -> mu.
+const COPL = [ [-60, -28, 310], [10, 48, 340], [70, 114, 370], [-20, 30, 400] ];
+const PERT = [ 40, -35, 25, -45 ];           // generic mode breaks coplanarity
+let coplanar = true;
+function scenePoints() {
+    return coplanar ? COPL
+        : COPL.map((P, i) => [P[0], P[1] + PERT[i], P[2]]);
+}
+function metrics(hh) {                        // computed at separation hh
+    const saved = h; h = hh;
+    const pts = scenePoints();
+    const ads = pts.map(addressOf);
+    const lam = crossRatio(ads[0][0], ads[1][0], ads[2][0], ads[3][0]);
+    const mu  = crossRatio(ads[0][1], ads[1][1], ads[2][1], ads[3][1]);
+    // bow of the chain of m: max deviation of the segment's image from the
+    // chord between its endpoint images
+    const S = [], N = 40;
+    for (let i = 0; i <= N; i++) {
+        const u = i/N;
+        S.push(toScreen([ E1[0]+u*(E2[0]-E1[0]), E1[1]+u*(E2[1]-E1[1]),
+                          E1[2]+u*(E2[2]-E1[2]) ]));
+    }
+    const A = S[0], B = S[N];
+    const L = Math.hypot(B[0]-A[0], B[1]-A[1]);
+    let bow = 0;
+    for (const p of S)
+        bow = Math.max(bow, Math.abs((B[0]-A[0])*(A[1]-p[1]) -
+                                     (A[0]-p[0])*(B[1]-A[1])) / L);
+    let gap = Infinity;
+    for (let i = 0; i < 4; i++) for (let j = i+1; j < 4; j++)
+        gap = Math.min(gap, rayDistance(ads[i], ads[j]));
+    h = saved;
+    return { lam, mu, fuse: Math.abs(lam - mu), bow, gap, ads };
+}
+
+// ================================================================ 3D PANEL
+const cv3 = document.getElementById("cv3d");
+const c3 = cv3.getContext("2d");
+let W3 = 0, H3 = 0;
+const C = { yaw: -0.62, pitch: 0.30, dist: 820, fl: 640,
+            tx: 0, ty: 0, tz: 210 };
+function rot(p) {
+    const x = p[0]-C.tx, y = p[1]-C.ty, z = p[2]-C.tz;
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    const x1 =  cy*x + sy*z, z1 = -sy*x + cy*z;
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    return [x1, cp*y - sp*z1, sp*y + cp*z1];
+}
+function proj(p) {
+    const v = rot(p), zc = v[2] + C.dist;
+    const f = C.fl / Math.max(zc, 12);
+    return [W3/2 + v[0]*f, H3/2 - v[1]*f, zc];
+}
+function line3(a, b, color, width, alpha, dash) {
+    const P = proj(a), Q = proj(b);
+    c3.save(); c3.globalAlpha = alpha === undefined ? 1 : alpha;
+    c3.strokeStyle = color; c3.lineWidth = width || 1;
+    if (dash) c3.setLineDash(dash);
+    c3.beginPath(); c3.moveTo(P[0],P[1]); c3.lineTo(Q[0],Q[1]); c3.stroke();
+    c3.restore();
+}
+function poly3(pts, fill, alpha) {
+    c3.save(); c3.globalAlpha = alpha; c3.fillStyle = fill;
+    c3.beginPath();
+    pts.forEach((p, i) => { const q = proj(p);
+        i ? c3.lineTo(q[0],q[1]) : c3.moveTo(q[0],q[1]); });
+    c3.closePath(); c3.fill(); c3.restore();
+}
+function dot3(p, color, r, glow) {
+    const q = proj(p);
+    c3.save();
+    if (glow) { c3.shadowColor = color; c3.shadowBlur = 12; }
+    c3.fillStyle = color;
+    c3.beginPath(); c3.arc(q[0], q[1], r, 0, 6.2832); c3.fill();
+    c3.restore();
+    return q;
+}
+function label3(p, text, color, dx, dy) {
+    if (!showLabels) return;
+    const q = proj(p);
+    c3.save(); c3.font = "11px monospace"; c3.fillStyle = color;
+    c3.globalAlpha = 0.95;
+    c3.fillText(text, q[0]+(dx||8), q[1]+(dy||-8));
+    c3.restore();
+}
+function drawScreen3() {
+    const s = SCR_HALF, n = 8;
+    poly3([[-s,-s,0],[s,-s,0],[s,s,0],[-s,s,0]], "#0d1420", 0.55);
+    for (let i = -n; i <= n; i++) {
+        const al = i === 0 ? 0.30 : 0.12, k = s*i/n;
+        line3([k,-s,0],[k,s,0], "#3a5a80", 1, al);
+        line3([-s,k,0],[s,k,0], "#3a5a80", 1, al);
+    }
+}
+function drawSlits3() {
+    const ZH = Zh();
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 2.5, 1);
+    line3([-SLIT_HALF,0,ZH],[SLIT_HALF,0,ZH], "#a0ffb0", 2.5, 1);
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 9, 0.10);
+    line3([-SLIT_HALF,0,ZH],[SLIT_HALF,0,ZH], "#a0ffb0", 9, 0.10);
+    label3([0, SLIT_HALF, Zv], "\u2113\u2081", "#ffd9a0");
+    label3([SLIT_HALF, 0, ZH], "\u2113\u2082 (z = Zv+h)", "#a0ffb0", -100, -10);
+    // the forming pinhole
+    const fade = Math.max(0, 1 - h/15);
+    if (fade > 0.02) {
+        c3.save(); c3.globalAlpha = fade;
+        dot3([0, 0, Zv + h/2], "#66ccff", 5 + 4*fade, true);
+        c3.restore();
+        if (fade > 0.4) label3([0, 0, Zv + h/2], "O (pinhole)", "#66ccff", 10, -8);
+    }
+}
+function drawScene3(M) {
+    // the test line m and its threading fan
+    line3(E1, E2, "#ff8fd0", 2.2, 1);
+    label3([(E1[0]+E2[0])/2, (E1[1]+E2[1])/2, (E1[2]+E2[2])/2],
+           "m", "#ff8fd0", 10, -10);
+    // the four scene points and their rays: watch them re-concentrate at O
+    const pts = scenePoints(), COLS = ["#ffffff", "#ff8fd0", "#7fd4ff", "#ffe066"];
+    pts.forEach((P, i) => {
+        const a = addressOf(P);
+        line3(rayAt(a, -30), rayAt(a, 440), COLS[i], 1.4, 0.85);
+        dot3(P, COLS[i], 5, true);
+        label3(P, "P" + "\u2081\u2082\u2083\u2084"[i], COLS[i], 8, -6);
+        dot3([0, a[0], Zv], "#ffd9a0", 3, true);
+        dot3([a[1], 0, Zh()], "#a0ffb0", 3, true);
+    });
+}
+
+// ================================================================ RIGHT PANEL
+// top: the image chart (chain of m).  bottom: log-log convergence plot.
+const cvI = document.getElementById("cvim");
+const cI = cvI.getContext("2d");
+let WI = 0, HI = 0;
+const im = { x0: 0, y0: 0, size: 0 };
+const pl = { x0: 0, y0: 0, w: 0, h: 0 };
+function layoutI() {
+    const m = 34;
+    const half = HI * 0.56;
+    im.size = Math.min(WI - 2*m, half - m - 20);
+    im.x0 = (WI - im.size)/2; im.y0 = m;
+    pl.x0 = 56; pl.y0 = half + 16;
+    pl.w = WI - pl.x0 - 24; pl.h = HI - pl.y0 - 38;
+}
+const imX = (x) => im.x0 + (x + SCR_HALF)/(2*SCR_HALF)*im.size;
+const imY = (y) => im.y0 + (SCR_HALF - y)/(2*SCR_HALF)*im.size;
+// log-log axes: h in [0.5, 100], metric in [1e-4, 1e2]
+const LMX = [Math.log10(H_MIN), Math.log10(H_MAX)];
+const LMY = [-4, 2];
+const plX = (hh) => pl.x0 + (Math.log10(hh) - LMX[0])/(LMX[1]-LMX[0])*pl.w;
+const plY = (v) => {
+    const lv = Math.max(LMY[0], Math.min(LMY[1], Math.log10(Math.max(v, 1e-12))));
+    return pl.y0 + (LMY[1] - lv)/(LMY[1]-LMY[0])*pl.h;
+};
+function drawRight(cur, M) {
+    cI.clearRect(0, 0, WI, HI);
+    cI.fillStyle = "#050505"; cI.fillRect(0, 0, WI, HI);
+    layoutI();
+    // ---- image chart
+    const n = 8;
+    for (let i = 0; i <= n; i++) {
+        const k = im.x0 + im.size*i/n, l = im.y0 + im.size*i/n;
+        cI.strokeStyle = "#3a5a80"; cI.globalAlpha = i === n/2 ? 0.3 : 0.12;
+        cI.beginPath(); cI.moveTo(k, im.y0); cI.lineTo(k, im.y0+im.size); cI.stroke();
+        cI.beginPath(); cI.moveTo(im.x0, l); cI.lineTo(im.x0+im.size, l); cI.stroke();
+    }
+    cI.globalAlpha = 1;
+    cI.strokeStyle = "#444"; cI.strokeRect(im.x0, im.y0, im.size, im.size);
+    cI.save(); cI.beginPath();
+    cI.rect(im.x0, im.y0, im.size, im.size); cI.clip();
+    // chord (the pinhole's answer) then the chain (the cross-slit's answer)
+    const S0 = toScreen(E1), S1 = toScreen(E2);
+    cI.strokeStyle = "#8fa3c0"; cI.lineWidth = 1; cI.setLineDash([4,4]);
+    cI.beginPath(); cI.moveTo(imX(S0[0]), imY(S0[1]));
+    cI.lineTo(imX(S1[0]), imY(S1[1])); cI.stroke(); cI.setLineDash([]);
+    cI.strokeStyle = "#7fd4ff"; cI.lineWidth = 2.2;
+    cI.beginPath(); let first = true;
+    for (let i = 0; i <= 120; i++) {
+        const u = i/120;
+        const s = toScreen([ E1[0]+u*(E2[0]-E1[0]), E1[1]+u*(E2[1]-E1[1]),
+                             E1[2]+u*(E2[2]-E1[2]) ]);
+        if (Math.abs(s[0]) > SCR_HALF*1.3 || Math.abs(s[1]) > SCR_HALF*1.3) {
+            first = true; continue;
+        }
+        first ? cI.moveTo(imX(s[0]), imY(s[1])) : cI.lineTo(imX(s[0]), imY(s[1]));
+        first = false;
+    }
+    cI.stroke();
+    // image points of the four scene rays
+    const COLS = ["#ffffff", "#ff8fd0", "#7fd4ff", "#ffe066"];
+    scenePoints().forEach((P, i) => {
+        const s = toScreen(P);
+        cI.fillStyle = COLS[i];
+        cI.beginPath(); cI.arc(imX(s[0]), imY(s[1]), 3.5, 0, 6.2832); cI.fill();
+    });
+    cI.restore();
+    if (showLabels) {
+        cI.font = "11px monospace"; cI.fillStyle = "#7fd4ff";
+        cI.fillText("chain of m \u00b7 bow " + cur.bow.toFixed(2) +
+                    " px  (dashed = chord)", im.x0 + 6, im.y0 + im.size + 14);
+    }
+    // ---- convergence plot: bow(h) and |lam-mu|(h), full curves + marker
+    cI.strokeStyle = "#333";
+    cI.strokeRect(pl.x0, pl.y0, pl.w, pl.h);
+    cI.font = "10px monospace"; cI.fillStyle = "#777";
+    for (const hh of [1, 10, 100]) {
+        const x = plX(hh);
+        cI.globalAlpha = 0.15; cI.strokeStyle = "#8fa3c0";
+        cI.beginPath(); cI.moveTo(x, pl.y0); cI.lineTo(x, pl.y0+pl.h); cI.stroke();
+        cI.globalAlpha = 1;
+        cI.fillText("h=" + hh, x - 12, pl.y0 + pl.h + 12);
+    }
+    for (const v of [1e-4, 1e-2, 1, 100]) {
+        const y = plY(v);
+        cI.globalAlpha = 0.15; cI.strokeStyle = "#8fa3c0";
+        cI.beginPath(); cI.moveTo(pl.x0, y); cI.lineTo(pl.x0+pl.w, y); cI.stroke();
+        cI.globalAlpha = 1;
+        cI.fillText(v >= 1 ? String(v) : v.toExponential(0), pl.x0 - 42, y + 3);
+    }
+    const curves = [ { key: "bow",  col: "#7fd4ff" },
+                     { key: "fuse", col: "#cf9bff" },
+                     { key: "gap",  col: "#ff9d6b" } ];
+    for (const cv of curves) {
+        cI.strokeStyle = cv.col; cI.lineWidth = 1.6; cI.beginPath();
+        let f2 = true;
+        for (let i = 0; i <= 80; i++) {
+            const hh = Math.pow(10, LMX[0] + (LMX[1]-LMX[0])*i/80);
+            const v = metrics(hh)[cv.key];
+            const x = plX(hh), y = plY(v);
+            f2 ? cI.moveTo(x, y) : cI.lineTo(x, y);
+            f2 = false;
+        }
+        cI.stroke();
+    }
+    if (showLabels) {
+        cI.fillStyle = "#7fd4ff"; cI.fillText("bow(h)", pl.x0 + 6, plY(metrics(H_MIN*1.4).bow) - 6);
+        cI.fillStyle = "#cf9bff"; cI.fillText("|\u03bb\u2212\u03bc|(h)", pl.x0 + 6, plY(metrics(H_MIN*1.4).fuse) + 14);
+        cI.fillStyle = "#ff9d6b"; cI.fillText("min ray gap(h)", pl.x0 + pl.w - 110, plY(metrics(H_MAX/1.4).gap) - 6);
+        cI.fillStyle = "#666";
+        cI.fillText("log\u2013log \u00b7 slope 1 = linear death in h",
+                    pl.x0 + 6, pl.y0 + 14);
+    }
+    // current-h marker line
+    const x = plX(h);
+    cI.strokeStyle = "#eee"; cI.globalAlpha = 0.5; cI.setLineDash([3,4]);
+    cI.beginPath(); cI.moveTo(x, pl.y0); cI.lineTo(x, pl.y0 + pl.h); cI.stroke();
+    cI.setLineDash([]); cI.globalAlpha = 1;
+    for (const cv of curves) {
+        const v = cur[cv.key];
+        cI.fillStyle = cv.col;
+        cI.beginPath(); cI.arc(x, plY(v), 4, 0, 6.2832); cI.fill();
+    }
+}
+
+// ================================================================ HUD
+const el = (id) => document.getElementById(id);
+let showLabels = true;
+function updateHUD(cur, M) {
+    el("hval").textContent = h.toFixed(1);
+    el("hlab").textContent = h.toFixed(1);
+    el("bow").textContent = cur.bow.toFixed(2) + " px";
+    const norm = Math.max(Math.abs(M.a), Math.abs(M.b),
+                          Math.abs(M.c)*SCR_HALF, Math.abs(M.d));
+    el("cval").textContent = (Math.abs(M.c)*SCR_HALF/(norm||1)).toFixed(3);
+    el("lam").textContent = cur.lam.toFixed(4);
+    el("mu").textContent = cur.mu.toFixed(4);
+    el("fuse").textContent = cur.fuse < 1e-3
+        ? cur.fuse.toExponential(1) : cur.fuse.toFixed(4);
+    el("fusenote").textContent = coplanar
+        ? "(coplanar with O: fuses)" : "(generic: plateaus)";
+    el("gap").textContent = cur.gap.toFixed(2);
+    const m = el("mode");
+    if (h < 3) { m.textContent = "\u2192 PINHOLE (bundle at O)"; m.className = "ph"; }
+    else { m.textContent = "CROSS-SLIT"; m.className = "xs"; }
+}
+
+// ================================================================ LOOP
+let collapsing = false, collDir = -1;
+const slowMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function frame() {
+    if (collapsing) {
+        const rate = slowMotion ? 1.004 : 1.012;
+        h = collDir < 0 ? h/rate : h*rate;
+        if (h <= H_MIN) { h = H_MIN; collDir = 1; }
+        if (h >= H_MAX) { h = H_MAX; collDir = -1; }
+        el("hslide").value = Math.log10(h).toFixed(3);
+    }
+    c3.clearRect(0, 0, W3, H3);
+    c3.fillStyle = "#050505"; c3.fillRect(0, 0, W3, H3);
+    const cur = metrics(h);
+    const M = chainCoeffs(E1, E2);
+    drawScreen3();
+    drawSlits3();
+    drawScene3(M);
+    drawRight(cur, M);
+    updateHUD(cur, M);
+    requestAnimationFrame(frame);
+}
+
+// ================================================================ INPUT
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W3 = cv3.clientWidth; H3 = cv3.clientHeight;
+    cv3.width = W3*dpr; cv3.height = H3*dpr; c3.setTransform(dpr,0,0,dpr,0,0);
+    WI = cvI.clientWidth; HI = cvI.clientHeight;
+    cvI.width = WI*dpr; cvI.height = HI*dpr; cI.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener("resize", resize);
+let drag3 = null;
+cv3.addEventListener("pointerdown", (e) => {
+    cv3.setPointerCapture(e.pointerId);
+    const r = cv3.getBoundingClientRect();
+    drag3 = { x: e.clientX - r.left, y: e.clientY - r.top,
+              yaw: C.yaw, pitch: C.pitch };
+});
+cv3.addEventListener("pointermove", (e) => {
+    if (!drag3) return;
+    const r = cv3.getBoundingClientRect();
+    C.yaw   = drag3.yaw   + ((e.clientX - r.left) - drag3.x) * 0.006;
+    C.pitch = Math.min(1.35, Math.max(-1.35,
+              drag3.pitch + ((e.clientY - r.top) - drag3.y) * 0.006));
+});
+window.addEventListener("pointerup", () => { drag3 = null; });
+cv3.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    C.dist = Math.min(1700, Math.max(320, C.dist * (1 + e.deltaY * 0.001)));
+}, { passive: false });
+let pinchD = 0;
+cv3.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                             e.touches[0].clientY - e.touches[1].clientY);
+        if (pinchD) C.dist = Math.min(1700, Math.max(320, C.dist * pinchD / d));
+        pinchD = d;
+    }
+}, { passive: true });
+cv3.addEventListener("touchend", () => { pinchD = 0; });
+
+// ================================================================ CONTROLS
+el("hslide").addEventListener("input", (e) => {
+    h = Math.pow(10, +e.target.value);
+    collapsing = false; el("bcollapse").classList.remove("active");
+});
+el("bcollapse").addEventListener("click", (e) => {
+    collapsing = !collapsing; collDir = -1;
+    e.target.classList.toggle("active", collapsing);
+});
+el("bcopl").addEventListener("click", () => {
+    coplanar = true;
+    el("bcopl").classList.add("active"); el("bgen").classList.remove("active");
+});
+el("bgen").addEventListener("click", () => {
+    coplanar = false;
+    el("bgen").classList.add("active"); el("bcopl").classList.remove("active");
+});
+el("blabels").addEventListener("click", (e) => {
+    showLabels = !showLabels; e.target.classList.toggle("active", showLabels);
+});
+el("breset").addEventListener("click", () => {
+    h = 100; el("hslide").value = "2"; collapsing = false;
+    el("bcollapse").classList.remove("active");
+    coplanar = true;
+    el("bcopl").classList.add("active"); el("bgen").classList.remove("active");
+    C.yaw = -0.62; C.pitch = 0.30; C.dist = 820;
+});
+
+// ================================================================ GO
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

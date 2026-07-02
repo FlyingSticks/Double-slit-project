@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tetra Engine: Aperture Cross-Ratio</title>
+<style>
+    body { margin: 0; padding: 0; background: #050505; color: #fff;
+           font-family: 'Segoe UI', monospace; overflow: hidden;
+           height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+
+    header { height: 40px; background: #111; border-bottom: 1px solid #333;
+             display: flex; align-items: center; justify-content: space-between;
+             padding: 0 20px; flex-shrink: 0; }
+    h1 { font-size: 14px; margin: 0; color: #e8e8ff; letter-spacing: 1px;
+         text-transform: uppercase; }
+    .tag { background: #11202a; padding: 2px 6px; border-radius: 4px;
+           font-size: 10px; color: #7fd4ff; border: 1px solid #2e5a75;
+           white-space: nowrap; }
+
+    #stage { flex: 1; display: flex; position: relative; min-height: 0; }
+    .panel { flex: 1; position: relative; min-width: 0; min-height: 0; }
+    .panel + .panel { border-left: 1px solid #222; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none;
+             cursor: grab; }
+    canvas.dragging { cursor: move; }
+    .panel-cap { position: absolute; top: 8px; left: 10px; z-index: 5;
+        font-family: monospace; font-size: 11px; color: #888;
+        background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 3px;
+        border: 1px solid #333; pointer-events: none; letter-spacing: 1px; }
+    .panel-cap b { color: #ddd; }
+
+    .overlay-info { position: absolute; top: 34px; left: 10px; z-index: 10;
+        background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 4px;
+        border: 1px solid #444; pointer-events: none; font-family: monospace;
+        font-size: 11px; line-height: 1.7; max-width: 330px; }
+    .dim { color: #888; }
+    .c1  { color: #ffd9a0; }
+    .c2  { color: #a0ffb0; }
+    .cS  { color: #7fd4ff; }
+    .cP  { color: #d0a8ff; }
+    #match  { color: #6fdc8c; }
+    #jensen { color: #ffb35c; }
+
+    #panel { position: absolute; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 50%;
+        transform: translateX(-50%); z-index: 10; width: min(560px, 94vw);
+        background: rgba(10,10,15,0.92); border: 1px solid #333;
+        border-radius: 4px; padding: 10px 14px; font-family: monospace; }
+    #panel label { display: flex; justify-content: space-between;
+        font-size: 11px; color: #888; margin-bottom: 2px; }
+    #panel input[type=range] { width: 100%; accent-color: #7fd4ff; }
+    .btn-row { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap;
+        justify-content: center; }
+    button { background: #1a1a22; color: #ccc; border: 1px solid #444;
+        border-radius: 4px; font-family: monospace; font-size: 11px;
+        padding: 5px 10px; cursor: pointer; }
+    button.active { background: #14222b; color: #7fd4ff; border-color: #3d7ea3; }
+    button:focus-visible { outline: 2px solid #7fd4ff; }
+
+    @media (max-width: 700px), (orientation: portrait) {
+        #stage { flex-direction: column; }
+        .panel + .panel { border-left: none; border-top: 1px solid #222; }
+        .overlay-info { font-size: 10px; line-height: 1.5; max-width: 260px; }
+        h1 { font-size: 11px; }
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Aperture Cross-Ratio <span style="color:#666">//</span> Theorem 7</h1>
+    <div class="tag">DEPTH = (F&#8321;, F&#8322;; S, P)</div>
+</header>
+
+<div id="stage">
+    <div class="panel">
+        <canvas id="cv3d"></canvas>
+        <div class="panel-cap"><b>SCENE</b> &mdash; encode: the screen measures AR</div>
+        <div class="overlay-info">
+            <div><span class="dim">z =</span> <span id="zval" class="cP">350.0</span>
+                 &nbsp;<span class="dim">target r =</span> <span id="rval">14</span></div>
+            <div><span class="dim">AR (measured w/h)</span> =
+                 <span id="ar" class="cS">0.3000</span></div>
+            <div><span class="dim">(F&#8321;,F&#8322;;S,P)</span> =
+                 <span id="xr">0.3000</span>
+                 &nbsp;<span class="dim">&Delta;</span> <span id="match">&#10003;</span></div>
+            <div><span class="dim">Solver V2.1 &#7825;</span> =
+                 <span id="zhat">350.0</span></div>
+            <div id="jrow" style="display:none">
+                <span class="dim">E[&#7825;] &minus; z =</span>
+                <span id="jensen">+0.0</span>
+                <span class="dim">(Jensen, Cor 7.3)</span></div>
+            <div class="dim" style="font-size:10px; margin-top:4px" id="hint">
+                Drag P along its ray: depth is the only thing AR reads.<br>
+                Drag a foot to move the ray: AR does not care (Cor 7.2).<br>
+                Resize the target: AR does not care either (demo 17).
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <canvas id="cvplot"></canvas>
+        <div class="panel-cap"><b>SOLVER</b> &mdash; decode: z(AR) is cross-ratio
+             inversion (M&ouml;bius) &mdash; drag the marker</div>
+    </div>
+
+    <div id="panel">
+        <label><span>target radius r</span><span id="rlab">14</span></label>
+        <input type="range" id="rslide" min="6" max="24" step="1" value="14">
+        <label style="margin-top:6px"><span>AR noise &sigma; (codec jitter)</span>
+               <span id="slab">0.012</span></label>
+        <input type="range" id="sslide" min="0.002" max="0.030" step="0.001" value="0.012">
+        <div class="btn-row">
+            <button id="bnoise">Jensen noise</button>
+            <button id="blabels" class="active">Labels</button>
+            <button id="breset">Reset</button>
+        </div>
+    </div>
+</div>
+
+<script>
+"use strict";
+// ================================================================ RIG
+// Calibrated rig (Level 3): screen z=0, l1 = {(0,s,Zv)}, l2 = {(t,0,Zh)}.
+// On P's own ray the four canonical points sit at z = Zv, Zh, 0, z.
+// Theorem 7:  AR(P) = Mx/My = (F1, F2; S, P)
+// Solver V2.1 (its inverse):  z = Zv*Zh*(AR - 1) / (AR*Zh - Zv)
+const Zv = 150, Zh = 250, DD = Zh - Zv;
+const SLIT_HALF = 170, SCR_HALF = 140;
+const Z_LO = 285, Z_HI = 440;              // working interval for P
+const AR_LO = arOf(Z_LO), AR_HI = arOf(Z_HI);
+
+// ================================================================ MATH
+function arOf(z)  { return (Zv/(z - Zv)) / (Zh/(z - Zh)); }      // Mx/My
+function crossRatio(a, b, c, d) {          // (A,B;C,D) doc convention
+    return ((c - a)*(d - b)) / ((c - b)*(d - a));
+}
+function xrOf(z)  { return crossRatio(Zv, Zh, 0, z); }           // (F1,F2;S,P)
+function solver(ar) { return Zv*Zh*(ar - 1) / (ar*Zh - Zv); }    // V2.1
+function d2z(ar) {                          // numerical z''(AR), for the HUD
+    const h = 1e-4;
+    return (solver(ar+h) - 2*solver(ar) + solver(ar-h)) / (h*h);
+}
+// cross-slit projection of a general scene point onto the screen
+function toScreen(X, Y, Z) {
+    return [ -X*Zv/(Z - Zv), -Y*Zh/(Z - Zh) ];
+}
+function rayAt(a, z) {                      // ray of address a = [s,t]
+    const lam = (z - Zv)/DD;
+    return [ a[1]*lam, a[0]*(1 - lam), z ];
+}
+function rayDirUnitZ(a) { return [ a[1]/DD, -a[0]/DD, 1 ]; }     // dP/dz
+
+// ================================================================ STATE
+let A = [20, -40];                          // the ray's address
+let Pz = 350;                               // depth of P along the ray
+let rTar = 14, sigma = 0.012, noiseOn = false, showLabels = true;
+let cloud = null, cloudMean = 0;            // Jensen Monte-Carlo cache
+const C = { yaw: -0.62, pitch: 0.30, dist: 800, fl: 640,
+            tx: 0, ty: 0, tz: 200 };
+
+function gauss() {                          // Box–Muller
+    const u = Math.random() || 1e-12, v = Math.random();
+    return Math.sqrt(-2*Math.log(u)) * Math.cos(6.2832*v);
+}
+function rebuildCloud() {
+    const ar0 = arOf(Pz), N = 400, zs = [];
+    let sum = 0;
+    for (let i = 0; i < N; i++) {
+        const ar = Math.min(0.56, Math.max(0.02, ar0 + sigma*gauss()));
+        const z = solver(ar);
+        zs.push([ar, z]); sum += z;
+    }
+    cloud = zs; cloudMean = sum / N;
+}
+
+// ================================================================ 3D PANEL
+const cv3 = document.getElementById("cv3d");
+const c3 = cv3.getContext("2d");
+let W3 = 0, H3 = 0;
+function rot(p) {
+    const x = p[0]-C.tx, y = p[1]-C.ty, z = p[2]-C.tz;
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    const x1 =  cy*x + sy*z, z1 = -sy*x + cy*z;
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    return [x1, cp*y - sp*z1, sp*y + cp*z1];
+}
+function proj(p) {
+    const v = rot(p), zc = v[2] + C.dist;
+    const f = C.fl / Math.max(zc, 12);
+    return [W3/2 + v[0]*f, H3/2 - v[1]*f, zc];
+}
+function invRotDir(d) {
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    const y1 = cp*d[1] + sp*d[2], z1 = -sp*d[1] + cp*d[2];
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    return [ cy*d[0] - sy*z1, y1, sy*d[0] + cy*z1 ];
+}
+function camEye() {
+    const f = invRotDir([0,0,1]);
+    return [ C.tx - f[0]*C.dist, C.ty - f[1]*C.dist, C.tz - f[2]*C.dist ];
+}
+function pointerRay3(px, py) {
+    return { o: camEye(),
+             d: invRotDir([ (px - W3/2)/C.fl, -(py - H3/2)/C.fl, 1 ]) };
+}
+function dragAlongLine(p0, q, pr) {         // closest param of p0+u*q to ray
+    const w0 = [ p0[0]-pr.o[0], p0[1]-pr.o[1], p0[2]-pr.o[2] ];
+    const aa = q[0]*q[0]+q[1]*q[1]+q[2]*q[2];
+    const bb = q[0]*pr.d[0]+q[1]*pr.d[1]+q[2]*pr.d[2];
+    const cc = pr.d[0]*pr.d[0]+pr.d[1]*pr.d[1]+pr.d[2]*pr.d[2];
+    const dd = q[0]*w0[0]+q[1]*w0[1]+q[2]*w0[2];
+    const ee = pr.d[0]*w0[0]+pr.d[1]*w0[1]+pr.d[2]*w0[2];
+    const den = aa*cc - bb*bb;
+    if (Math.abs(den) < 1e-9) return 0;
+    return (bb*ee - cc*dd) / den;
+}
+function line3(a, b, color, width, alpha, dash) {
+    const P = proj(a), Q = proj(b);
+    c3.save(); c3.globalAlpha = alpha === undefined ? 1 : alpha;
+    c3.strokeStyle = color; c3.lineWidth = width || 1;
+    if (dash) c3.setLineDash(dash);
+    c3.beginPath(); c3.moveTo(P[0],P[1]); c3.lineTo(Q[0],Q[1]); c3.stroke();
+    c3.restore();
+}
+function path3(pts, color, width, alpha, close, fill) {
+    c3.save(); c3.globalAlpha = alpha === undefined ? 1 : alpha;
+    c3.strokeStyle = color; c3.lineWidth = width || 1;
+    c3.beginPath();
+    pts.forEach((p, i) => { const q = proj(p);
+        i ? c3.lineTo(q[0],q[1]) : c3.moveTo(q[0],q[1]); });
+    if (close) c3.closePath();
+    if (fill) { c3.fillStyle = fill; c3.fill(); }
+    c3.stroke(); c3.restore();
+}
+function poly3(pts, fill, alpha) {
+    c3.save(); c3.globalAlpha = alpha; c3.fillStyle = fill;
+    c3.beginPath();
+    pts.forEach((p, i) => { const q = proj(p);
+        i ? c3.lineTo(q[0],q[1]) : c3.moveTo(q[0],q[1]); });
+    c3.closePath(); c3.fill(); c3.restore();
+}
+function dot3(p, color, r, glow) {
+    const q = proj(p);
+    c3.save();
+    if (glow) { c3.shadowColor = color; c3.shadowBlur = 12; }
+    c3.fillStyle = color;
+    c3.beginPath(); c3.arc(q[0], q[1], r, 0, 6.2832); c3.fill();
+    c3.restore();
+    return q;
+}
+function label3(p, text, color, dx, dy) {
+    if (!showLabels) return;
+    const q = proj(p);
+    c3.save(); c3.font = "11px monospace"; c3.fillStyle = color;
+    c3.globalAlpha = 0.95;
+    c3.fillText(text, q[0]+(dx||8), q[1]+(dy||-8));
+    c3.restore();
+}
+function drawScreen3() {
+    const s = SCR_HALF, n = 8;
+    poly3([[-s,-s,0],[s,-s,0],[s,s,0],[-s,s,0]], "#0d1420", 0.55);
+    for (let i = -n; i <= n; i++) {
+        const al = i === 0 ? 0.30 : 0.12, k = s*i/n;
+        line3([k,-s,0],[k,s,0], "#3a5a80", 1, al);
+        line3([-s,k,0],[s,k,0], "#3a5a80", 1, al);
+    }
+    label3([-s, s, 0], "screen \u03a0", "#7fd4ff", 4, -6);
+}
+function drawSlits3() {
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 2.5, 1);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 2.5, 1);
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 9, 0.10);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 9, 0.10);
+    label3([0, SLIT_HALF, Zv], "\u2113\u2081 (governs w)", "#ffd9a0");
+    label3([SLIT_HALF, 0, Zh], "\u2113\u2082 (governs h)", "#a0ffb0", -110, -10);
+}
+function circlePts(n) {                     // frontal target at depth Pz
+    const P = rayAt(A, Pz), out = [];
+    for (let i = 0; i <= n; i++) {
+        const th = i/n * 6.2832;
+        out.push([ P[0] + rTar*Math.cos(th), P[1] + rTar*Math.sin(th), Pz ]);
+    }
+    return out;
+}
+function drawScene3() {
+    // the ray with its four canonical points
+    line3(rayAt(A, -20), rayAt(A, Z_HI + 10), "#ffffff", 1.6, 0.9);
+    const F1 = rayAt(A, Zv), F2 = rayAt(A, Zh),
+          S = rayAt(A, 0), P = rayAt(A, Pz);
+    // target circle and its exact screen image (an ellipse: w/h = AR)
+    const circ = circlePts(48);
+    const ell = circ.map((q) => { const s2 = toScreen(q[0],q[1],q[2]);
+                                  return [s2[0], s2[1], 0]; });
+    // guide rays from the target's four extreme points to their images
+    for (let k = 0; k < 48; k += 12) {
+        line3(circ[k], ell[k], "#8fa3c0", 1, 0.22);
+    }
+    path3(circ, "#d0a8ff", 1.6, 0.9, true, "rgba(208,168,255,0.10)");
+    path3(ell,  "#7fd4ff", 1.8, 0.95, true, "rgba(127,212,255,0.10)");
+    // width / height ticks on the ellipse
+    const sc = toScreen(P[0], P[1], Pz);
+    const w2 = rTar*Zv/(Pz - Zv), h2 = rTar*Zh/(Pz - Zh);
+    line3([sc[0]-w2, sc[1], 0], [sc[0]+w2, sc[1], 0], "#ffd9a0", 2, 0.9);
+    line3([sc[0], sc[1]-h2, 0], [sc[0], sc[1]+h2, 0], "#a0ffb0", 2, 0.9);
+    label3([sc[0]+w2, sc[1], 0], "w", "#ffd9a0", 6, 4);
+    label3([sc[0], sc[1]+h2, 0], "h", "#a0ffb0", 6, -4);
+    // canonical points
+    dot3(F1, "#ffd9a0", 5, true);  label3(F1, "F\u2081", "#ffd9a0");
+    dot3(F2, "#a0ffb0", 5, true);  label3(F2, "F\u2082", "#a0ffb0");
+    dot3(S,  "#7fd4ff", 4, true);  label3(S,  "S",       "#7fd4ff");
+    const q = dot3(P, "#d0a8ff", 7, true);
+    c3.save(); c3.strokeStyle = "#d0a8ff"; c3.globalAlpha = 0.5;
+    c3.beginPath(); c3.arc(q[0], q[1], 12, 0, 6.2832); c3.stroke(); c3.restore();
+    label3(P, "P", "#d0a8ff", 14, 4);
+}
+
+// ================================================================ PLOT PANEL
+const cvP = document.getElementById("cvplot");
+const cP = cvP.getContext("2d");
+let WP = 0, HP = 0;
+const plot = { x0: 0, y0: 0, w: 0, h: 0,
+               arA: AR_LO - 0.015, arB: AR_HI + 0.015,
+               zA: Z_LO - 25, zB: Z_HI + 25 };
+function plLayout() {
+    const ml = 54, mr = 20, mt = 34, mb = 40;
+    plot.x0 = ml; plot.y0 = mt; plot.w = WP - ml - mr; plot.h = HP - mt - mb - 90;
+    if (plot.h < 120) plot.h = HP - mt - mb;     // stacked-mobile fallback
+}
+function plX(ar) { return plot.x0 + (ar - plot.arA)/(plot.arB - plot.arA)*plot.w; }
+function plY(z)  { return plot.y0 + (plot.zB - z)/(plot.zB - plot.zA)*plot.h; }
+function plAR(px){ return plot.arA + (px - plot.x0)/plot.w * (plot.arB - plot.arA); }
+function drawPlot() {
+    cP.clearRect(0, 0, WP, HP);
+    cP.fillStyle = "#050505"; cP.fillRect(0, 0, WP, HP);
+    plLayout();
+    // frame + gridlines
+    cP.strokeStyle = "#333"; cP.lineWidth = 1;
+    cP.strokeRect(plot.x0, plot.y0, plot.w, plot.h);
+    cP.font = "10px monospace"; cP.fillStyle = "#777";
+    for (let ar = 0.15; ar <= 0.42; ar += 0.05) {
+        const x = plX(ar);
+        cP.globalAlpha = 0.15; cP.strokeStyle = "#8fa3c0";
+        cP.beginPath(); cP.moveTo(x, plot.y0); cP.lineTo(x, plot.y0+plot.h);
+        cP.stroke(); cP.globalAlpha = 1;
+        cP.fillText(ar.toFixed(2), x - 10, plot.y0 + plot.h + 14);
+    }
+    for (let z = 280; z <= 460; z += 40) {
+        const y = plY(z);
+        cP.globalAlpha = 0.15; cP.strokeStyle = "#8fa3c0";
+        cP.beginPath(); cP.moveTo(plot.x0, y); cP.lineTo(plot.x0+plot.w, y);
+        cP.stroke(); cP.globalAlpha = 1;
+        cP.fillText(String(z), plot.x0 - 34, y + 3);
+    }
+    cP.fillStyle = "#aaa";
+    cP.fillText("AR = w/h  \u2192", plot.x0 + plot.w - 90, plot.y0 + plot.h + 28);
+    cP.save(); cP.translate(plot.x0 - 40, plot.y0 + 90); cP.rotate(-Math.PI/2);
+    cP.fillText("depth z  \u2192", 0, 0); cP.restore();
+    // the solver curve z(AR)
+    cP.strokeStyle = "#7fd4ff"; cP.lineWidth = 2; cP.beginPath();
+    let first = true;
+    for (let i = 0; i <= 240; i++) {
+        const ar = plot.arA + (plot.arB - plot.arA)*i/240;
+        const x = plX(ar), y = plY(solver(ar));
+        if (y < plot.y0 - 2 || y > plot.y0 + plot.h + 2) { first = true; continue; }
+        first ? cP.moveTo(x, y) : cP.lineTo(x, y);
+        first = false;
+    }
+    cP.stroke();
+    if (showLabels) {
+        cP.fillStyle = "#7fd4ff";
+        cP.fillText("z = Zv\u00b7Zh\u00b7(AR\u22121)/(AR\u00b7Zh\u2212Zv)",
+                    plot.x0 + 10, plot.y0 + 16);
+    }
+    const ar0 = arOf(Pz), x0 = plX(ar0), y0 = plY(Pz);
+    // Jensen apparatus
+    if (noiseOn && cloud) {
+        // secant chord AR0 ± σ: its midpoint sits ABOVE the curve (convexity)
+        const aL = ar0 - sigma, aR2 = ar0 + sigma;
+        const zL = solver(aL), zR = solver(aR2);
+        cP.strokeStyle = "#ffb35c"; cP.lineWidth = 1.5; cP.setLineDash([5,4]);
+        cP.beginPath(); cP.moveTo(plX(aL), plY(zL));
+        cP.lineTo(plX(aR2), plY(zR)); cP.stroke(); cP.setLineDash([]);
+        const zm = (zL + zR)/2;
+        cP.fillStyle = "#ffb35c";
+        cP.beginPath(); cP.arc(x0, plY(zm), 4, 0, 6.2832); cP.fill();
+        if (showLabels)
+            cP.fillText("chord midpoint > curve", x0 + 10, plY(zm) - 6);
+        // Monte-Carlo cloud of decoded depths
+        cP.fillStyle = "#ffb35c"; cP.globalAlpha = 0.20;
+        for (const [ar, z] of cloud) {
+            const x = plX(ar), y = plY(z);
+            if (x > plot.x0 && x < plot.x0+plot.w &&
+                y > plot.y0 && y < plot.y0+plot.h) {
+                cP.beginPath(); cP.arc(x, y, 1.6, 0, 6.2832); cP.fill();
+            }
+        }
+        cP.globalAlpha = 1;
+        // true z and mean decoded z
+        cP.strokeStyle = "#8fa3c0"; cP.setLineDash([3,4]);
+        cP.beginPath(); cP.moveTo(plot.x0, y0);
+        cP.lineTo(plot.x0 + plot.w, y0); cP.stroke();
+        cP.strokeStyle = "#ffb35c";
+        const ym = plY(cloudMean);
+        cP.beginPath(); cP.moveTo(plot.x0, ym);
+        cP.lineTo(plot.x0 + plot.w, ym); cP.stroke(); cP.setLineDash([]);
+        if (showLabels) {
+            cP.fillStyle = "#8fa3c0"; cP.fillText("true z", plot.x0 + 4, y0 - 4);
+            cP.fillStyle = "#ffb35c"; cP.fillText("E[\u1e91]", plot.x0 + 4, ym - 4);
+        }
+    }
+    // current operating point (draggable)
+    cP.save(); cP.shadowColor = "#d0a8ff"; cP.shadowBlur = 12;
+    cP.fillStyle = "#d0a8ff";
+    cP.beginPath(); cP.arc(x0, y0, 6, 0, 6.2832); cP.fill(); cP.restore();
+    cP.strokeStyle = "#d0a8ff"; cP.globalAlpha = 0.5;
+    cP.beginPath(); cP.arc(x0, y0, 11, 0, 6.2832); cP.stroke();
+    cP.globalAlpha = 1;
+    if (showLabels) {
+        cP.fillStyle = "#d0a8ff";
+        cP.fillText("(AR, z)", x0 + 12, y0 + 4);
+        cP.fillStyle = "#666";
+        cP.fillText("z\u2033(AR) = " + d2z(ar0).toExponential(1) +
+                    "  > 0 : convex", plot.x0 + 10, plot.y0 + plot.h - 8);
+    }
+}
+
+// ================================================================ HUD
+const el = (id) => document.getElementById(id);
+function updateHUD() {
+    const ar = arOf(Pz), xr = xrOf(Pz), zh = solver(ar);
+    el("zval").textContent = Pz.toFixed(1);
+    el("rval").textContent = rTar;
+    el("ar").textContent = ar.toFixed(4);
+    el("xr").textContent = xr.toFixed(4);
+    const d = Math.abs(ar - xr);
+    el("match").textContent = "\u2713 " + (d === 0 ? "0" : d.toExponential(0));
+    el("zhat").textContent = zh.toFixed(1) +
+        "  (err " + Math.abs(zh - Pz).toExponential(0) + ")";
+    el("jrow").style.display = noiseOn ? "" : "none";
+    if (noiseOn && cloud) {
+        const b = cloudMean - Pz;
+        el("jensen").textContent = (b >= 0 ? "+" : "") + b.toFixed(1);
+    }
+}
+
+// ================================================================ LOOP
+function frame() {
+    c3.clearRect(0, 0, W3, H3);
+    c3.fillStyle = "#050505"; c3.fillRect(0, 0, W3, H3);
+    drawScreen3();
+    drawSlits3();
+    drawScene3();
+    drawPlot();
+    updateHUD();
+    requestAnimationFrame(frame);
+}
+
+// ================================================================ INPUT
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W3 = cv3.clientWidth; H3 = cv3.clientHeight;
+    cv3.width = W3*dpr; cv3.height = H3*dpr; c3.setTransform(dpr,0,0,dpr,0,0);
+    WP = cvP.clientWidth; HP = cvP.clientHeight;
+    cvP.width = WP*dpr; cvP.height = HP*dpr; cP.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener("resize", resize);
+function pos(cv, e) {
+    const r = cv.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+}
+const clampZ = (z) => Math.min(Z_HI, Math.max(Z_LO, z));
+const clampAddr = (v) => Math.min(55, Math.max(-55, v));
+
+// ---- 3D panel: drag P along the ray, drag feet along slits, else orbit
+let drag3 = null;
+cv3.addEventListener("pointerdown", (e) => {
+    cv3.setPointerCapture(e.pointerId);
+    const [px, py] = pos(cv3, e);
+    const cand = [
+        { d: dist2(px, py, proj(rayAt(A, Pz))), kind: "P" },
+        { d: dist2(px, py, proj(rayAt(A, Zv))), kind: "F1" },
+        { d: dist2(px, py, proj(rayAt(A, Zh))), kind: "F2" },
+    ].sort((a,b) => a.d - b.d);
+    if (cand[0].d < 22) {
+        drag3 = { kind: cand[0].kind }; cv3.classList.add("dragging");
+    } else {
+        drag3 = { kind: "orbit", x: px, y: py, yaw: C.yaw, pitch: C.pitch };
+    }
+});
+function dist2(px, py, q) { return Math.hypot(px - q[0], py - q[1]); }
+cv3.addEventListener("pointermove", (e) => {
+    if (!drag3) return;
+    const [px, py] = pos(cv3, e);
+    const pr = pointerRay3(px, py);
+    if (drag3.kind === "P") {
+        const z = dragAlongLine(rayAt(A, 0), rayDirUnitZ(A), pr);
+        Pz = clampZ(z);
+        if (noiseOn) rebuildCloud();
+    } else if (drag3.kind === "F1") {
+        A[0] = clampAddr(dragAlongLine([0,0,Zv], [0,1,0], pr));
+    } else if (drag3.kind === "F2") {
+        A[1] = clampAddr(dragAlongLine([0,0,Zh], [1,0,0], pr));
+    } else {
+        C.yaw   = drag3.yaw   + (px - drag3.x) * 0.006;
+        C.pitch = Math.min(1.35, Math.max(-1.35,
+                  drag3.pitch + (py - drag3.y) * 0.006));
+    }
+});
+window.addEventListener("pointerup", () => {
+    drag3 = null; dragP = false;
+    cv3.classList.remove("dragging"); cvP.classList.remove("dragging");
+});
+cv3.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    C.dist = Math.min(1600, Math.max(320, C.dist * (1 + e.deltaY * 0.001)));
+}, { passive: false });
+let pinchD = 0;
+cv3.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                             e.touches[0].clientY - e.touches[1].clientY);
+        if (pinchD) C.dist = Math.min(1600, Math.max(320, C.dist * pinchD / d));
+        pinchD = d;
+    }
+}, { passive: true });
+cv3.addEventListener("touchend", () => { pinchD = 0; });
+
+// ---- plot panel: drag the operating point horizontally = decode
+let dragP = false;
+cvP.addEventListener("pointerdown", (e) => {
+    cvP.setPointerCapture(e.pointerId);
+    dragP = true; cvP.classList.add("dragging");
+    const [px] = pos(cvP, e);
+    Pz = clampZ(solver(Math.min(AR_HI, Math.max(AR_LO, plAR(px)))));
+    if (noiseOn) rebuildCloud();
+});
+cvP.addEventListener("pointermove", (e) => {
+    if (!dragP) return;
+    const [px] = pos(cvP, e);
+    Pz = clampZ(solver(Math.min(AR_HI, Math.max(AR_LO, plAR(px)))));
+    if (noiseOn) rebuildCloud();
+});
+
+// ================================================================ CONTROLS
+el("rslide").addEventListener("input", (e) => {
+    rTar = +e.target.value; el("rlab").textContent = rTar;
+});
+el("sslide").addEventListener("input", (e) => {
+    sigma = +e.target.value; el("slab").textContent = sigma.toFixed(3);
+    if (noiseOn) rebuildCloud();
+});
+el("bnoise").addEventListener("click", (e) => {
+    noiseOn = !noiseOn; e.target.classList.toggle("active", noiseOn);
+    if (noiseOn) rebuildCloud();
+});
+el("blabels").addEventListener("click", (e) => {
+    showLabels = !showLabels; e.target.classList.toggle("active", showLabels);
+});
+el("breset").addEventListener("click", () => {
+    A = [20, -40]; Pz = 350; rTar = 14; sigma = 0.012;
+    el("rslide").value = "14"; el("rlab").textContent = "14";
+    el("sslide").value = "0.012"; el("slab").textContent = "0.012";
+    C.yaw = -0.62; C.pitch = 0.30; C.dist = 800;
+    if (noiseOn) rebuildCloud();
+});
+
+// ================================================================ GO
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

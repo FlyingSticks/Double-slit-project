@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tetra Engine: Dual View — Space / Ray Space</title>
+<style>
+    body { margin: 0; padding: 0; background: #050505; color: #fff;
+           font-family: 'Segoe UI', monospace; overflow: hidden;
+           height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+
+    header { height: 40px; background: #111; border-bottom: 1px solid #333;
+             display: flex; align-items: center; justify-content: space-between;
+             padding: 0 20px; flex-shrink: 0; }
+    h1 { font-size: 14px; margin: 0; color: #e8e8ff; letter-spacing: 1px;
+         text-transform: uppercase; }
+    .tag { background: #1a1626; padding: 2px 6px; border-radius: 4px;
+           font-size: 10px; color: #d0a8ff; border: 1px solid #5c4090;
+           white-space: nowrap; }
+
+    #stage { flex: 1; display: flex; position: relative; min-height: 0; }
+    .panel { flex: 1; position: relative; min-width: 0; min-height: 0; }
+    .panel + .panel { border-left: 1px solid #222; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none;
+             cursor: grab; }
+    canvas.dragging { cursor: move; }
+    .panel-cap { position: absolute; top: 8px; left: 10px; z-index: 5;
+        font-family: monospace; font-size: 11px; color: #888;
+        background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 3px;
+        border: 1px solid #333; pointer-events: none; letter-spacing: 1px; }
+    .panel-cap b { color: #ddd; font-weight: bold; }
+
+    .overlay-info { position: absolute; bottom: calc(56px + env(safe-area-inset-bottom, 0px)); left: 10px; z-index: 10;
+        background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 4px;
+        border: 1px solid #444; pointer-events: none; font-family: monospace;
+        font-size: 11px; line-height: 1.7; max-width: 330px; }
+    .dim { color: #888; }
+    .c1  { color: #ffd9a0; }   /* slit 1 / S-pencil amber */
+    .c2  { color: #a0ffb0; }   /* slit 2 / T-pencil green */
+    .cA  { color: #ffffff; }
+    .cB  { color: #ff9d6b; }
+    #rel.skew { color: #8fa3c0; }
+    #rel.meet { color: #ffe066; font-weight: bold; }
+
+    #controls { position: absolute; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 50%;
+        transform: translateX(-50%); z-index: 10; display: flex; gap: 6px;
+        flex-wrap: wrap; justify-content: center; padding: 0 10px; }
+    button { background: #1a1a22; color: #ccc; border: 1px solid #444;
+        border-radius: 4px; font-family: monospace; font-size: 11px;
+        padding: 6px 10px; cursor: pointer; }
+    button.active { background: #241a33; color: #d0a8ff; border-color: #7a5cb8; }
+    button:focus-visible { outline: 2px solid #d0a8ff; }
+
+    @media (max-width: 700px), (orientation: portrait) {
+        #stage { flex-direction: column; }
+        .panel + .panel { border-left: none; border-top: 1px solid #222; }
+        .overlay-info { font-size: 10px; line-height: 1.5; max-width: 250px;
+                        bottom: calc(52px + env(safe-area-inset-bottom, 0px)); }
+        h1 { font-size: 11px; }
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Dual View <span style="color:#666">//</span> Space &#8596; Ray Space</h1>
+    <div class="tag">THE IMAGE IS THE RAY SPACE</div>
+</header>
+
+<div id="stage">
+    <div class="panel">
+        <canvas id="cv3d"></canvas>
+        <div class="panel-cap"><b>SPACE</b> P&sup3; &mdash; drag a foot along its slit</div>
+    </div>
+    <div class="panel">
+        <canvas id="cvrs"></canvas>
+        <div class="panel-cap"><b>RAY SPACE</b> P&sup1;&times;P&sup1; (D3) &mdash; a ray is a point; drag it</div>
+    </div>
+
+    <div class="overlay-info">
+        <div><span class="cA">A</span> <span class="dim">(s, t) =</span>
+             (<span id="As" class="c1">0</span>, <span id="At" class="c2">0</span>)</div>
+        <div id="Brow" style="display:none">
+            <span class="cB">B</span> <span class="dim">(s, t) =</span>
+            (<span id="Bs" class="c1">0</span>, <span id="Bt" class="c2">0</span>)</div>
+        <div id="relrow" style="display:none"><span class="dim">A, B:</span>
+             <span id="rel" class="skew">skew</span></div>
+        <div class="dim" style="font-size:10px; margin-top:4px" id="hint">
+            Rows of the grid are S-pencils, columns are T-pencils (M0).<br>
+            Drag either representation of the ray; the other follows.
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="bsp">S-pencil</button>
+        <button id="btp">T-pencil</button>
+        <button id="bray2">Second ray</button>
+        <button id="blabels" class="active">Labels</button>
+        <button id="breset">Reset</button>
+    </div>
+</div>
+
+<script>
+"use strict";
+// ================================================================ RIG
+// Same calibrated rig as Demo 25:
+//   screen Pi        : z = 0
+//   l1, vertical slit: { (0, s, Zv) }   — s is the address's first slot
+//   l2, horizontal   : { (t, 0, Zh) }   — t is the second
+// A ray IS its address: the line through (0,s,Zv) and (t,0,Zh).
+const Zv = 150, Zh = 250, D = Zh - Zv;
+const SLIT_HALF = 170, SCR_HALF = 140, Z_MIN = -30, Z_MAX = 440;
+
+// ================================================================ MATH
+function rayAt(a, z) {              // a = [s, t]
+    const lam = (z - Zv) / D;
+    return [ a[1] * lam, a[0] * (1 - lam), z ];
+}
+function foot1(a) { return [0, a[0], Zv]; }
+function foot2(a) { return [a[1], 0, Zh]; }
+function screenPt(a) { return rayAt(a, 0); }        // = (-1.5 t, 2.5 s, 0)
+function rayDir(a) { return [a[1], -a[0], D]; }
+
+// distance between two rays (C2 dichotomy: 0 iff a shared foot)
+function rayDistance(a, b) {
+    const p = [0, a[0] - b[0], 0];                  // foot1(a) - foot1(b)
+    const u = rayDir(a), v = rayDir(b);
+    const c = [ u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0] ];
+    const n = Math.hypot(c[0], c[1], c[2]);
+    if (n < 1e-9) return 0;                          // identical ray
+    return Math.abs(p[0]*c[0] + p[1]*c[1] + p[2]*c[2]) / n;
+}
+
+// ================================================================ STATE
+let A = [55, -60];                  // ray A address
+let B = [-40, 80];                  // ray B address
+let twoRays = false;
+let showSP = false, showTP = false, showLabels = true;
+let active = "A";                   // last-touched ray owns the pencils
+const SNAP_ADDR = 7;                // address snap for parallel discovery
+
+const C = { yaw: -0.62, pitch: 0.34, dist: 780, fl: 640,
+            tx: 0, ty: 0, tz: 200 };
+
+// ================================================================ 3D PANEL
+const cv3 = document.getElementById("cv3d");
+const c3 = cv3.getContext("2d");
+let W3 = 0, H3 = 0;
+
+function rot(p) {
+    const x = p[0]-C.tx, y = p[1]-C.ty, z = p[2]-C.tz;
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    const x1 =  cy*x + sy*z, z1 = -sy*x + cy*z;
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    return [x1, cp*y - sp*z1, sp*y + cp*z1];
+}
+function proj(p) {
+    const v = rot(p);
+    const zc = v[2] + C.dist;
+    const f = C.fl / Math.max(zc, 12);
+    return [W3/2 + v[0]*f, H3/2 - v[1]*f, zc];
+}
+function invRotDir(d) {
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    const y1 = cp*d[1] + sp*d[2], z1 = -sp*d[1] + cp*d[2];
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    return [ cy*d[0] - sy*z1, y1, sy*d[0] + cy*z1 ];
+}
+function camEye() {
+    const f = invRotDir([0,0,1]);
+    return [ C.tx - f[0]*C.dist, C.ty - f[1]*C.dist, C.tz - f[2]*C.dist ];
+}
+function pointerRay3(px, py) {
+    return { o: camEye(),
+             d: invRotDir([ (px - W3/2)/C.fl, -(py - H3/2)/C.fl, 1 ]) };
+}
+// closest parameter of line (p0 + u*q) to a pointer ray — for foot dragging
+function dragAlongLine(p0, q, pr) {
+    const w0 = [ p0[0]-pr.o[0], p0[1]-pr.o[1], p0[2]-pr.o[2] ];
+    const aa = q[0]*q[0]+q[1]*q[1]+q[2]*q[2];
+    const bb = q[0]*pr.d[0]+q[1]*pr.d[1]+q[2]*pr.d[2];
+    const cc = pr.d[0]*pr.d[0]+pr.d[1]*pr.d[1]+pr.d[2]*pr.d[2];
+    const dd = q[0]*w0[0]+q[1]*w0[1]+q[2]*w0[2];
+    const ee = pr.d[0]*w0[0]+pr.d[1]*w0[1]+pr.d[2]*w0[2];
+    const den = aa*cc - bb*bb;
+    if (Math.abs(den) < 1e-9) return 0;
+    return (bb*ee - cc*dd) / den;
+}
+
+function line3(a, b, color, width, alpha, dash) {
+    const P = proj(a), Q = proj(b);
+    c3.save(); c3.globalAlpha = alpha === undefined ? 1 : alpha;
+    c3.strokeStyle = color; c3.lineWidth = width || 1;
+    if (dash) c3.setLineDash(dash);
+    c3.beginPath(); c3.moveTo(P[0],P[1]); c3.lineTo(Q[0],Q[1]); c3.stroke();
+    c3.restore();
+}
+function poly3(pts, fill, alpha) {
+    c3.save(); c3.globalAlpha = alpha; c3.fillStyle = fill;
+    c3.beginPath();
+    pts.forEach((p, i) => { const q = proj(p);
+        i ? c3.lineTo(q[0],q[1]) : c3.moveTo(q[0],q[1]); });
+    c3.closePath(); c3.fill(); c3.restore();
+}
+function dot3(p, color, r, glow) {
+    const q = proj(p);
+    c3.save();
+    if (glow) { c3.shadowColor = color; c3.shadowBlur = 12; }
+    c3.fillStyle = color;
+    c3.beginPath(); c3.arc(q[0], q[1], r, 0, 6.2832); c3.fill();
+    c3.restore();
+    return q;
+}
+function label3(p, text, color, dx, dy) {
+    if (!showLabels) return;
+    const q = proj(p);
+    c3.save(); c3.font = "11px monospace"; c3.fillStyle = color;
+    c3.globalAlpha = 0.95;
+    c3.fillText(text, q[0]+(dx||8), q[1]+(dy||-8));
+    c3.restore();
+}
+
+function drawScreen3() {
+    const s = SCR_HALF, n = 8;
+    poly3([[-s,-s,0],[s,-s,0],[s,s,0],[-s,s,0]], "#0d1420", 0.55);
+    for (let i = -n; i <= n; i++) {
+        const al = i === 0 ? 0.30 : 0.12, k = s*i/n;
+        line3([k,-s,0],[k,s,0], "#3a5a80", 1, al);
+        line3([-s,k,0],[s,k,0], "#3a5a80", 1, al);
+    }
+    label3([-s, s, 0], "screen \u03a0", "#7fd4ff", 4, -6);
+}
+function drawSlits3() {
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 2.5, 1);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 2.5, 1);
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 9, 0.10);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 9, 0.10);
+    label3([0, SLIT_HALF, Zv], "\u2113\u2081", "#ffd9a0");
+    label3([SLIT_HALF, 0, Zh], "\u2113\u2082", "#a0ffb0", -18, -10);
+}
+function drawRay3(a, color, main) {
+    line3(rayAt(a, Z_MIN), rayAt(a, Z_MAX), color, main ? 1.8 : 1.4, 0.95);
+    const F1 = foot1(a), F2 = foot2(a), S = screenPt(a);
+    dot3(F1, "#ffd9a0", main ? 5 : 4, true);
+    dot3(F2, "#a0ffb0", main ? 5 : 4, true);
+    dot3(S,  "#7fd4ff", 3.5, true);
+}
+// S-pencil at foot1(a): all rays with the same s — fills span(F1, l2)
+function drawSPencil3(a) {
+    const F1 = foot1(a);
+    const ext = (p, q, k) => [ p[0]+(q[0]-p[0])*k, p[1]+(q[1]-p[1])*k,
+                               p[2]+(q[2]-p[2])*k ];
+    const o1 = [-SLIT_HALF, 0, Zh], o2 = [SLIT_HALF, 0, Zh];
+    poly3([ext(F1,o1,-0.4), ext(F1,o1,2.1), ext(F1,o2,2.1), ext(F1,o2,-0.4)],
+          "#ffb35c", 0.09);
+    for (let t = -SLIT_HALF; t <= SLIT_HALF; t += SLIT_HALF/5)
+        line3(rayAt([a[0], t], Z_MIN), rayAt([a[0], t], Z_MAX),
+              "#ffd9a0", 1, 0.20);
+    // trace on the screen: the pencil cuts Pi in the line y = 2.5 s
+    const y0 = screenPt(a)[1];
+    if (Math.abs(y0) <= SCR_HALF)
+        line3([-SCR_HALF, y0, 0], [SCR_HALF, y0, 0], "#ffd9a0", 2, 0.6);
+    label3(ext(F1, o2, 1.6), "S-pencil {s = " + a[0].toFixed(0) + "}", "#ffd9a0");
+}
+function drawTPencil3(a) {
+    const F2 = foot2(a);
+    const ext = (p, q, k) => [ p[0]+(q[0]-p[0])*k, p[1]+(q[1]-p[1])*k,
+                               p[2]+(q[2]-p[2])*k ];
+    const o1 = [0, -SLIT_HALF, Zv], o2 = [0, SLIT_HALF, Zv];
+    poly3([ext(F2,o1,-0.4), ext(F2,o1,2.1), ext(F2,o2,2.1), ext(F2,o2,-0.4)],
+          "#57e07a", 0.09);
+    for (let s = -SLIT_HALF; s <= SLIT_HALF; s += SLIT_HALF/5)
+        line3(rayAt([s, a[1]], Z_MIN), rayAt([s, a[1]], Z_MAX),
+              "#a0ffb0", 1, 0.20);
+    const x0 = screenPt(a)[0];
+    if (Math.abs(x0) <= SCR_HALF)
+        line3([x0, -SCR_HALF, 0], [x0, SCR_HALF, 0], "#a0ffb0", 2, 0.6);
+    label3(ext(F2, o2, 1.6), "T-pencil {t = " + a[1].toFixed(0) + "}", "#a0ffb0");
+}
+function drawMeeting3() {
+    if (!twoRays) return;
+    if (Math.abs(A[0] - B[0]) < 1e-6) {
+        const M = foot1(A);
+        dot3(M, "#ffe066", 8, true);
+        label3(M, "meet: shared F\u2081", "#ffe066", 12, 4);
+    } else if (Math.abs(A[1] - B[1]) < 1e-6) {
+        const M = foot2(A);
+        dot3(M, "#ffe066", 8, true);
+        label3(M, "meet: shared F\u2082", "#ffe066", 12, 4);
+    }
+}
+
+// ================================================================ RS PANEL
+const cvR = document.getElementById("cvrs");
+const cR = cvR.getContext("2d");
+let WR = 0, HR = 0;
+const RANGE = SLIT_HALF;            // chart shows s, t in [-RANGE, RANGE]
+let chart = { x0: 0, y0: 0, size: 0 };
+
+function rsLayout() {
+    const m = 44;
+    chart.size = Math.min(WR, HR) - 2*m;
+    chart.x0 = (WR - chart.size) / 2;
+    chart.y0 = (HR - chart.size) / 2;
+}
+function rsToPx(a) {                // [s,t] -> pixel: t rightward, s upward
+    return [ chart.x0 + (a[1] + RANGE)/(2*RANGE) * chart.size,
+             chart.y0 + (RANGE - a[0])/(2*RANGE) * chart.size ];
+}
+function pxToRs(px, py) {
+    return [ RANGE - (py - chart.y0)/chart.size * 2*RANGE,
+             (px - chart.x0)/chart.size * 2*RANGE - RANGE ];
+}
+function drawRS() {
+    cR.clearRect(0, 0, WR, HR);
+    cR.fillStyle = "#050505"; cR.fillRect(0, 0, WR, HR);
+    rsLayout();
+    const n = 8;
+    // grid: horizontal lines = S-pencils (constant s), vertical = T-pencils
+    for (let i = 0; i <= n; i++) {
+        const k = i / n;
+        const x = chart.x0 + k*chart.size, y = chart.y0 + k*chart.size;
+        cR.strokeStyle = "#ffd9a0"; cR.globalAlpha = 0.14; cR.lineWidth = 1;
+        cR.beginPath(); cR.moveTo(chart.x0, y);
+        cR.lineTo(chart.x0 + chart.size, y); cR.stroke();
+        cR.strokeStyle = "#a0ffb0";
+        cR.beginPath(); cR.moveTo(x, chart.y0);
+        cR.lineTo(x, chart.y0 + chart.size); cR.stroke();
+    }
+    cR.globalAlpha = 1;
+    cR.strokeStyle = "#444"; cR.lineWidth = 1;
+    cR.strokeRect(chart.x0, chart.y0, chart.size, chart.size);
+    // axis labels
+    cR.font = "11px monospace";
+    cR.fillStyle = "#a0ffb0";
+    cR.fillText("t  (foot on \u2113\u2082) \u2192",
+                chart.x0 + chart.size - 130, chart.y0 + chart.size + 18);
+    cR.save();
+    cR.translate(chart.x0 - 12, chart.y0 + 130); cR.rotate(-Math.PI/2);
+    cR.fillStyle = "#ffd9a0";
+    cR.fillText("s  (foot on \u2113\u2081) \u2192", 0, 0);
+    cR.restore();
+
+    // highlighted pencils through the active ray
+    const act = active === "A" ? A : B;
+    if (showSP) {
+        const p = rsToPx(act);
+        cR.strokeStyle = "#ffd9a0"; cR.lineWidth = 2; cR.globalAlpha = 0.8;
+        cR.beginPath(); cR.moveTo(chart.x0, p[1]);
+        cR.lineTo(chart.x0 + chart.size, p[1]); cR.stroke();
+        cR.globalAlpha = 1;
+        if (showLabels) cR.fillStyle = "#ffd9a0",
+            cR.fillText("S-pencil (row)", chart.x0 + 6, p[1] - 6);
+    }
+    if (showTP) {
+        const p = rsToPx(act);
+        cR.strokeStyle = "#a0ffb0"; cR.lineWidth = 2; cR.globalAlpha = 0.8;
+        cR.beginPath(); cR.moveTo(p[0], chart.y0);
+        cR.lineTo(p[0], chart.y0 + chart.size); cR.stroke();
+        cR.globalAlpha = 1;
+        if (showLabels) cR.fillStyle = "#a0ffb0",
+            cR.fillText("T-pencil (col)", p[0] + 6, chart.y0 + 14);
+    }
+    // the rays as points
+    const drawPt = (a, color, name) => {
+        const p = rsToPx(a);
+        cR.save(); cR.shadowColor = color; cR.shadowBlur = 12;
+        cR.fillStyle = color;
+        cR.beginPath(); cR.arc(p[0], p[1], 6, 0, 6.2832); cR.fill();
+        cR.restore();
+        cR.strokeStyle = color; cR.globalAlpha = 0.5;
+        cR.beginPath(); cR.arc(p[0], p[1], 11, 0, 6.2832); cR.stroke();
+        cR.globalAlpha = 1;
+        if (showLabels) { cR.fillStyle = color; cR.fillText(name, p[0]+13, p[1]+4); }
+    };
+    if (twoRays) drawPt(B, "#ff9d6b", "B");
+    drawPt(A, "#ffffff", "A");
+    // alignment guides when parallel
+    if (twoRays) {
+        const pa = rsToPx(A), pb = rsToPx(B);
+        if (Math.abs(A[0] - B[0]) < 1e-6) {
+            cR.strokeStyle = "#ffe066"; cR.lineWidth = 1.5; cR.globalAlpha = 0.8;
+            cR.setLineDash([4,4]);
+            cR.beginPath(); cR.moveTo(pa[0], pa[1]); cR.lineTo(pb[0], pb[1]);
+            cR.stroke(); cR.setLineDash([]); cR.globalAlpha = 1;
+        } else if (Math.abs(A[1] - B[1]) < 1e-6) {
+            cR.strokeStyle = "#ffe066"; cR.lineWidth = 1.5; cR.globalAlpha = 0.8;
+            cR.setLineDash([4,4]);
+            cR.beginPath(); cR.moveTo(pa[0], pa[1]); cR.lineTo(pb[0], pb[1]);
+            cR.stroke(); cR.setLineDash([]); cR.globalAlpha = 1;
+        }
+    }
+}
+
+// ================================================================ HUD
+const el = (id) => document.getElementById(id);
+function updateHUD() {
+    el("As").textContent = A[0].toFixed(1);
+    el("At").textContent = A[1].toFixed(1);
+    el("Brow").style.display = twoRays ? "" : "none";
+    el("relrow").style.display = twoRays ? "" : "none";
+    if (twoRays) {
+        el("Bs").textContent = B[0].toFixed(1);
+        el("Bt").textContent = B[1].toFixed(1);
+        const rel = el("rel");
+        if (Math.abs(A[0]-B[0]) < 1e-6) {
+            rel.textContent = "1-PARALLEL \u2014 meet at shared F\u2081 (C2)";
+            rel.className = "meet";
+        } else if (Math.abs(A[1]-B[1]) < 1e-6) {
+            rel.textContent = "2-PARALLEL \u2014 meet at shared F\u2082 (C2)";
+            rel.className = "meet";
+        } else {
+            rel.textContent = "skew \u00b7 gap = " + rayDistance(A,B).toFixed(1);
+            rel.className = "skew";
+        }
+        el("hint").innerHTML =
+            "Same row or same column \u21d4 the rays meet in space \u2014<br>" +
+            "and only there. Off-grid alignment, no two rays touch (C2).<br>" +
+            "Drag B near A's row/column; it snaps to show the meeting.";
+    } else {
+        el("hint").innerHTML =
+            "Rows of the grid are S-pencils, columns are T-pencils (M0).<br>" +
+            "Drag either representation of the ray; the other follows.";
+    }
+}
+
+// ================================================================ LOOP
+function frame() {
+    c3.clearRect(0, 0, W3, H3);
+    c3.fillStyle = "#050505"; c3.fillRect(0, 0, W3, H3);
+    drawScreen3();
+    const act = active === "A" ? A : B;
+    if (showSP) drawSPencil3(act);
+    if (showTP) drawTPencil3(act);
+    drawSlits3();
+    if (twoRays) drawRay3(B, "#ff9d6b", active === "B");
+    drawRay3(A, "#ffffff", active === "A");
+    drawMeeting3();
+    drawRS();
+    updateHUD();
+    requestAnimationFrame(frame);
+}
+
+// ================================================================ INPUT
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W3 = cv3.clientWidth; H3 = cv3.clientHeight;
+    cv3.width = W3*dpr; cv3.height = H3*dpr;
+    c3.setTransform(dpr,0,0,dpr,0,0);
+    WR = cvR.clientWidth; HR = cvR.clientHeight;
+    cvR.width = WR*dpr; cvR.height = HR*dpr;
+    cR.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener("resize", resize);
+
+const clampAddr = (v) => Math.min(SLIT_HALF, Math.max(-SLIT_HALF, v));
+function snapParallel(ray, other) {          // discoverable C2: snap to rows/cols
+    if (!twoRays) return ray;
+    if (Math.abs(ray[0]-other[0]) < SNAP_ADDR) ray[0] = other[0];
+    if (Math.abs(ray[1]-other[1]) < SNAP_ADDR) ray[1] = other[1];
+    return ray;
+}
+
+// ---- 3D panel: drag feet along their slits, else orbit
+let drag3 = null;
+function pos(cv, e) {
+    const r = cv.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+}
+cv3.addEventListener("pointerdown", (e) => {
+    cv3.setPointerCapture(e.pointerId);
+    const [px, py] = pos(cv3, e);
+    const cand = [];
+    const push = (ray, name, foot) => {
+        const q = proj(foot === 1 ? foot1(ray) : foot2(ray));
+        cand.push({ d: Math.hypot(px-q[0], py-q[1]), ray, name, foot });
+    };
+    push(A, "A", 1); push(A, "A", 2);
+    if (twoRays) { push(B, "B", 1); push(B, "B", 2); }
+    cand.sort((a,b) => a.d - b.d);
+    if (cand[0].d < 22) {
+        drag3 = { kind: "foot", ray: cand[0].ray, foot: cand[0].foot };
+        active = cand[0].name;
+        cv3.classList.add("dragging");
+    } else {
+        drag3 = { kind: "orbit", x: px, y: py, yaw: C.yaw, pitch: C.pitch };
+    }
+});
+cv3.addEventListener("pointermove", (e) => {
+    if (!drag3) return;
+    const [px, py] = pos(cv3, e);
+    if (drag3.kind === "foot") {
+        const pr = pointerRay3(px, py);
+        if (drag3.foot === 1) {          // slide F1 along l1: changes s
+            const u = dragAlongLine([0,0,Zv], [0,1,0], pr);
+            drag3.ray[0] = clampAddr(u);
+        } else {                          // slide F2 along l2: changes t
+            const u = dragAlongLine([0,0,Zh], [1,0,0], pr);
+            drag3.ray[1] = clampAddr(u);
+        }
+        snapParallel(drag3.ray, drag3.ray === A ? B : A);
+    } else {
+        C.yaw   = drag3.yaw   + (px - drag3.x) * 0.006;
+        C.pitch = Math.min(1.35, Math.max(-1.35,
+                  drag3.pitch + (py - drag3.y) * 0.006));
+    }
+});
+window.addEventListener("pointerup", () => {
+    drag3 = null; dragR = null;
+    cv3.classList.remove("dragging"); cvR.classList.remove("dragging");
+});
+cv3.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    C.dist = Math.min(1600, Math.max(320, C.dist * (1 + e.deltaY * 0.001)));
+}, { passive: false });
+let pinchD = 0;
+cv3.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                             e.touches[0].clientY - e.touches[1].clientY);
+        if (pinchD) C.dist = Math.min(1600, Math.max(320, C.dist * pinchD / d));
+        pinchD = d;
+    }
+}, { passive: true });
+cv3.addEventListener("touchend", () => { pinchD = 0; });
+
+// ---- ray-space panel: drag the ray-points
+let dragR = null;
+cvR.addEventListener("pointerdown", (e) => {
+    cvR.setPointerCapture(e.pointerId);
+    const [px, py] = pos(cvR, e);
+    const cand = [{ d: Math.hypot(...(([x,y])=>[px-x,py-y])(rsToPx(A))),
+                    ray: A, name: "A" }];
+    if (twoRays) cand.push({ d: Math.hypot(...(([x,y])=>[px-x,py-y])(rsToPx(B))),
+                             ray: B, name: "B" });
+    cand.sort((a,b) => a.d - b.d);
+    if (cand[0].d < 26) {
+        dragR = { ray: cand[0].ray };
+        active = cand[0].name;
+        cvR.classList.add("dragging");
+    }
+});
+cvR.addEventListener("pointermove", (e) => {
+    if (!dragR) return;
+    const [px, py] = pos(cvR, e);
+    const a = pxToRs(px, py);
+    dragR.ray[0] = clampAddr(a[0]);
+    dragR.ray[1] = clampAddr(a[1]);
+    snapParallel(dragR.ray, dragR.ray === A ? B : A);
+});
+
+// ================================================================ BUTTONS
+el("bsp").addEventListener("click", (e) => {
+    showSP = !showSP; e.target.classList.toggle("active", showSP);
+});
+el("btp").addEventListener("click", (e) => {
+    showTP = !showTP; e.target.classList.toggle("active", showTP);
+});
+el("bray2").addEventListener("click", (e) => {
+    twoRays = !twoRays; e.target.classList.toggle("active", twoRays);
+    if (!twoRays) active = "A";
+});
+el("blabels").addEventListener("click", (e) => {
+    showLabels = !showLabels; e.target.classList.toggle("active", showLabels);
+});
+el("breset").addEventListener("click", () => {
+    A = [55, -60]; B = [-40, 80]; active = "A";
+    C.yaw = -0.62; C.pitch = 0.34; C.dist = 780;
+});
+
+// ================================================================ GO
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

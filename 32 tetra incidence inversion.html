@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tetra Engine: Incidence Inversion</title>
+<style>
+    body { margin: 0; padding: 0; background: #050505; color: #fff;
+           font-family: 'Segoe UI', monospace; overflow: hidden;
+           height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+
+    header { height: 40px; background: #111; border-bottom: 1px solid #333;
+             display: flex; align-items: center; justify-content: space-between;
+             padding: 0 20px; flex-shrink: 0; }
+    h1 { font-size: 14px; margin: 0; color: #e8e8ff; letter-spacing: 1px;
+         text-transform: uppercase; }
+    .tag { background: #262010; padding: 2px 6px; border-radius: 4px;
+           font-size: 10px; color: #ffe066; border: 1px solid #8f7a26;
+           white-space: nowrap; }
+
+    #stage { flex: 1; display: flex; position: relative; min-height: 0; }
+    .panel { flex: 1; position: relative; min-width: 0; min-height: 0; }
+    .panel + .panel { border-left: 1px solid #222; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none;
+             cursor: grab; }
+    canvas.dragging { cursor: move; }
+    .panel-cap { position: absolute; top: 8px; left: 10px; z-index: 5;
+        font-family: monospace; font-size: 11px; color: #888;
+        background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 3px;
+        border: 1px solid #333; pointer-events: none; letter-spacing: 1px; }
+    .panel-cap b { color: #ddd; }
+
+    .overlay-info { position: absolute; top: 34px; left: 10px; z-index: 10;
+        background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 4px;
+        border: 1px solid #444; pointer-events: none; font-family: monospace;
+        font-size: 11px; line-height: 1.7; max-width: 348px; }
+    .dim { color: #888; }
+    .c1  { color: #ffd9a0; }
+    .c2  { color: #a0ffb0; }
+    .cA  { color: #ffffff; }
+    .cB  { color: #ff9d6b; }
+    .cN  { color: #ffe066; }
+    #state.join { color: #b388ff; }
+    #state.null { color: #ffe066; font-weight: bold; }
+
+    #controls { position: absolute; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 50%;
+        transform: translateX(-50%); z-index: 10; display: flex; gap: 6px;
+        flex-wrap: wrap; justify-content: center; padding: 0 10px; }
+    button { background: #1a1a22; color: #ccc; border: 1px solid #444;
+        border-radius: 4px; font-family: monospace; font-size: 11px;
+        padding: 6px 10px; cursor: pointer; }
+    button.active { background: #2b2610; color: #ffe066; border-color: #a3903d; }
+    button:focus-visible { outline: 2px solid #ffe066; }
+
+    @media (max-width: 700px), (orientation: portrait) {
+        #stage { flex-direction: column; }
+        .panel + .panel { border-left: none; border-top: 1px solid #222; }
+        .overlay-info { font-size: 10px; line-height: 1.5; max-width: 272px; }
+        h1 { font-size: 11px; }
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Incidence Inversion <span style="color:#666">//</span> The Seam &sect;4&ndash;5</h1>
+    <div class="tag">THE SEAM IS THE PICTURE'S LIGHT CONE</div>
+</header>
+
+<div id="stage">
+    <div class="panel">
+        <canvas id="cv3d"></canvas>
+        <div class="panel-cap"><b>SPACE</b> &mdash; incidence: do the rays touch?</div>
+        <div class="overlay-info">
+            <div><span class="cA">A</span> = (<span id="As" class="c1">0</span>,
+                 <span id="At" class="c2">0</span>)
+                 &nbsp;<span class="cB">B</span> = (<span id="Bs" class="c1">0</span>,
+                 <span id="Bt" class="c2">0</span>)</div>
+            <div><span class="dim">&delta; = B&minus;A =</span>
+                 (<span id="ds">0</span>, <span id="dt">0</span>)
+                 <span class="dim">&isin; &#8477;&oplus;&#8477;</span></div>
+            <div><span class="dim">N(&delta;) = &Delta;s&middot;&Delta;t =</span>
+                 <span id="norm" class="cN">0</span></div>
+            <div><span class="dim">3D gap =</span> <span id="gap">0</span>
+                 <span class="dim">&nbsp;(&prop; |N|: the split-norm is the miss)</span></div>
+            <div><span class="dim">state:</span> <span id="state" class="join">&mdash;</span></div>
+            <div class="dim" style="font-size:10px; margin-top:4px" id="hint">
+                Joinable pair: a one-parameter family of chains threads both
+                &mdash; each is the image of a real line m touching both rays.<br>
+                Slide &delta; onto an axis: the rays MEET in space, and exactly
+                then no chain can join them. Incidence becomes prohibition.
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <canvas id="cvim"></canvas>
+        <div class="panel-cap"><b>IMAGE</b> &mdash; prohibition &middot; below: the
+             difference plane &#8477;&oplus;&#8477;</div>
+    </div>
+
+    <div id="controls">
+        <button id="bchains" class="active">Chains</button>
+        <button id="bsweep" class="active">Sweep</button>
+        <button id="bcone">Touch cone (&Delta;s=0)</button>
+        <button id="blabels" class="active">Labels</button>
+        <button id="breset">Reset</button>
+    </div>
+</div>
+
+<script>
+"use strict";
+// ================================================================ RIG
+const Zv = 150, Zh = 250, D = Zh - Zv;
+const SLIT_HALF = 170, SCR_HALF = 140, RANGE = SLIT_HALF;
+const DRANGE = 300;                       // difference-plane half-range
+
+// ================================================================ MATH
+function rayAt(a, z) {
+    const lam = (z - Zv)/D;
+    return [ a[1]*lam, a[0]*(1 - lam), z ];
+}
+function rayDir(a) { return [a[1], -a[0], D]; }
+function foot1(a) { return [0, a[0], Zv]; }
+function foot2(a) { return [a[1], 0, Zh]; }
+const cross = (u,v) => [ u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2],
+                         u[0]*v[1]-u[1]*v[0] ];
+const sub = (u,v) => [u[0]-v[0], u[1]-v[1], u[2]-v[2]];
+// generic line-line gap AND its closed form:
+//   gap = D|Ds*Dt| / sqrt(D^2 Ds^2 + D^2 Dt^2 + (s1 t2 - s2 t1)^2)
+// — the split-complex norm N = Ds*Dt IS the miss, up to a positive factor.
+function rayGap(a, b) {
+    const Ds = b[0]-a[0], Dt = b[1]-a[1];
+    const k = a[0]*b[1] - b[0]*a[1];
+    const den = Math.hypot(D*Ds, D*Dt, k);
+    return den < 1e-12 ? 0 : D*Math.abs(Ds*Dt)/den;
+}
+function fitMobius3(pts) {                // rows a*s + b - c*s*t - d*t = 0
+    const R = pts.map(([s,t]) => [s, 1, -s*t, -t]);
+    const minor = (cols) =>
+        R[0][cols[0]]*(R[1][cols[1]]*R[2][cols[2]] - R[1][cols[2]]*R[2][cols[1]])
+      - R[0][cols[1]]*(R[1][cols[0]]*R[2][cols[2]] - R[1][cols[2]]*R[2][cols[0]])
+      + R[0][cols[2]]*(R[1][cols[0]]*R[2][cols[1]] - R[1][cols[1]]*R[2][cols[0]]);
+    return { a:  minor([1,2,3]), b: -minor([0,2,3]),
+             c:  minor([0,1,3]), d: -minor([0,1,2]) };
+}
+function mobius(M, s) { return (M.a*s + M.b)/(M.c*s + M.d); }
+// transversal of three rays anchored at z-param u on the first (demo 29)
+function transversalAt(u, R1, R2, R3) {
+    const p = rayAt(R1, u);
+    const n2 = cross(sub(rayAt(R2, Zv), p), rayDir(R2));
+    const n3 = cross(sub(rayAt(R3, Zv), p), rayDir(R3));
+    const dir = cross(n2, n3);
+    const nn = Math.hypot(dir[0], dir[1], dir[2]);
+    if (nn < 1e-9) return null;
+    return { p, d: [dir[0]/nn, dir[1]/nn, dir[2]/nn] };
+}
+function closestPointOnLineToRay(L, a) {
+    const q = foot1(a), v = rayDir(a), w = sub(L.p, q);
+    const aa = L.d[0]**2 + L.d[1]**2 + L.d[2]**2;
+    const bb = L.d[0]*v[0] + L.d[1]*v[1] + L.d[2]*v[2];
+    const cc = v[0]**2 + v[1]**2 + v[2]**2;
+    const dd = L.d[0]*w[0] + L.d[1]*w[1] + L.d[2]*w[2];
+    const ee = v[0]*w[0] + v[1]*w[1] + v[2]*w[2];
+    const den = aa*cc - bb*bb;
+    const sc = Math.abs(den) > 1e-12 ? (bb*ee - cc*dd)/den : 0;
+    const tc = Math.abs(den) > 1e-12 ? (aa*ee - bb*dd)/den : 0;
+    return { onL: [L.p[0]+sc*L.d[0], L.p[1]+sc*L.d[1], L.p[2]+sc*L.d[2]],
+             onR: [q[0]+tc*v[0], q[1]+tc*v[1], q[2]+tc*v[2]] };
+}
+
+// ================================================================ STATE
+let A = [55, -60], B = [-40, 80];
+let showChains = true, sweep = true, showLabels = true;
+let phase = 0;
+const slowMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const NULL_EPS = 1e-6, SNAP = 6;
+const C = { yaw: -0.62, pitch: 0.30, dist: 820, fl: 640,
+            tx: 0, ty: 0, tz: 200 };
+
+function nullState() {
+    if (Math.abs(B[0]-A[0]) < NULL_EPS) return 1;    // share F1
+    if (Math.abs(B[1]-A[1]) < NULL_EPS) return 2;    // share F2
+    return 0;
+}
+// the one-parameter family of chains through A and B, parametrized by a
+// third anchor point (s3, T): each choice threads one chain through both
+function anchorS() {
+    let best = 0, bd = -1;
+    for (const s3 of [-150, -75, 0, 75, 150]) {
+        const d = Math.min(Math.abs(s3-A[0]), Math.abs(s3-B[0]));
+        if (d > bd) { bd = d; best = s3; }
+    }
+    return best;
+}
+function chainThrough(T) {
+    if (nullState()) return null;
+    const s3 = anchorS();
+    if (Math.abs(T - A[1]) < 4 || Math.abs(T - B[1]) < 4) return null;
+    const M = fitMobius3([A, B, [s3, T]]);
+    const sc = Math.max(Math.abs(M.a), Math.abs(M.b),
+                        Math.abs(M.c), Math.abs(M.d));
+    if (sc < 1e-9) return null;
+    return M;
+}
+
+// ================================================================ 3D PANEL
+const cv3 = document.getElementById("cv3d");
+const c3 = cv3.getContext("2d");
+let W3 = 0, H3 = 0;
+function rot(p) {
+    const x = p[0]-C.tx, y = p[1]-C.ty, z = p[2]-C.tz;
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    const x1 =  cy*x + sy*z, z1 = -sy*x + cy*z;
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    return [x1, cp*y - sp*z1, sp*y + cp*z1];
+}
+function proj(p) {
+    const v = rot(p), zc = v[2] + C.dist;
+    const f = C.fl / Math.max(zc, 12);
+    return [W3/2 + v[0]*f, H3/2 - v[1]*f, zc];
+}
+function invRotDir(d) {
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    const y1 = cp*d[1] + sp*d[2], z1 = -sp*d[1] + cp*d[2];
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    return [ cy*d[0] - sy*z1, y1, sy*d[0] + cy*z1 ];
+}
+function camEye() {
+    const f = invRotDir([0,0,1]);
+    return [ C.tx - f[0]*C.dist, C.ty - f[1]*C.dist, C.tz - f[2]*C.dist ];
+}
+function pointerRay3(px, py) {
+    return { o: camEye(),
+             d: invRotDir([ (px - W3/2)/C.fl, -(py - H3/2)/C.fl, 1 ]) };
+}
+function dragAlongLine(p0, q, pr) {
+    const w0 = [ p0[0]-pr.o[0], p0[1]-pr.o[1], p0[2]-pr.o[2] ];
+    const aa = q[0]*q[0]+q[1]*q[1]+q[2]*q[2];
+    const bb = q[0]*pr.d[0]+q[1]*pr.d[1]+q[2]*pr.d[2];
+    const cc = pr.d[0]*pr.d[0]+pr.d[1]*pr.d[1]+pr.d[2]*pr.d[2];
+    const dd = q[0]*w0[0]+q[1]*w0[1]+q[2]*w0[2];
+    const ee = pr.d[0]*w0[0]+pr.d[1]*w0[1]+pr.d[2]*w0[2];
+    const den = aa*cc - bb*bb;
+    if (Math.abs(den) < 1e-9) return 0;
+    return (bb*ee - cc*dd) / den;
+}
+function line3(a, b, color, width, alpha, dash) {
+    const P = proj(a), Q = proj(b);
+    c3.save(); c3.globalAlpha = alpha === undefined ? 1 : alpha;
+    c3.strokeStyle = color; c3.lineWidth = width || 1;
+    if (dash) c3.setLineDash(dash);
+    c3.beginPath(); c3.moveTo(P[0],P[1]); c3.lineTo(Q[0],Q[1]); c3.stroke();
+    c3.restore();
+}
+function poly3(pts, fill, alpha) {
+    c3.save(); c3.globalAlpha = alpha; c3.fillStyle = fill;
+    c3.beginPath();
+    pts.forEach((p, i) => { const q = proj(p);
+        i ? c3.lineTo(q[0],q[1]) : c3.moveTo(q[0],q[1]); });
+    c3.closePath(); c3.fill(); c3.restore();
+}
+function dot3(p, color, r, glow) {
+    const q = proj(p);
+    c3.save();
+    if (glow) { c3.shadowColor = color; c3.shadowBlur = 12; }
+    c3.fillStyle = color;
+    c3.beginPath(); c3.arc(q[0], q[1], r, 0, 6.2832); c3.fill();
+    c3.restore();
+    return q;
+}
+function label3(p, text, color, dx, dy) {
+    if (!showLabels) return;
+    const q = proj(p);
+    c3.save(); c3.font = "11px monospace"; c3.fillStyle = color;
+    c3.globalAlpha = 0.95;
+    c3.fillText(text, q[0]+(dx||8), q[1]+(dy||-8));
+    c3.restore();
+}
+function drawScreen3() {
+    const s = SCR_HALF, n = 8;
+    poly3([[-s,-s,0],[s,-s,0],[s,s,0],[-s,s,0]], "#0d1420", 0.55);
+    for (let i = -n; i <= n; i++) {
+        const al = i === 0 ? 0.30 : 0.12, k = s*i/n;
+        line3([k,-s,0],[k,s,0], "#3a5a80", 1, al);
+        line3([-s,k,0],[s,k,0], "#3a5a80", 1, al);
+    }
+}
+function drawSlits3() {
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 2.5, 1);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 2.5, 1);
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 9, 0.10);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 9, 0.10);
+    label3([0, SLIT_HALF, Zv], "\u2113\u2081", "#ffd9a0");
+    label3([SLIT_HALF, 0, Zh], "\u2113\u2082", "#a0ffb0", -18, -10);
+}
+function drawScene3(brightM, ns) {
+    // ray A and ray B
+    line3(rayAt(A, -30), rayAt(A, 440), "#ffffff", 1.7, 0.95);
+    line3(rayAt(B, -30), rayAt(B, 440), "#ff9d6b", 1.7, 0.95);
+    for (const [a, col] of [[A, "#ffffff"], [B, "#ff9d6b"]]) {
+        dot3(foot1(a), "#ffd9a0", 4, true);
+        dot3(foot2(a), "#a0ffb0", 4, true);
+        label3(rayAt(a, 405), a === A ? "A" : "B", col, 8, 0);
+    }
+    if (ns) {
+        // NULL: they meet — the incidence the image will refuse to record
+        const M = ns === 1 ? foot1(A) : foot2(A);
+        dot3(M, "#ffe066", 9, true);
+        label3(M, "MEET (shared F" + (ns===1 ? "\u2081" : "\u2082") + ")",
+               "#ffe066", 12, 4);
+        return;
+    }
+    // JOINABLE: the bright chain's witness line, physically touching both
+    if (brightM && brightM.line) {
+        const L = brightM.line;
+        const e = (k) => [L.p[0]+k*L.d[0], L.p[1]+k*L.d[1], L.p[2]+k*L.d[2]];
+        line3(e(-500), e(500), "#b388ff", 2, 0.9);
+        label3(e(200), "m (joins A and B)", "#b388ff", 8, -8);
+        for (const a of [A, B]) {
+            const cp = closestPointOnLineToRay(L, a);
+            dot3(cp.onR, "#b388ff", 5, true);
+        }
+    }
+    // the common-perpendicular gap segment
+    const cpAB = (() => {
+        const L = { p: foot1(A), d: rayDir(A) };
+        return closestPointOnLineToRay(L, B);
+    })();
+    line3(cpAB.onL, cpAB.onR, "#ffe066", 1.5, 0.7, [3,3]);
+}
+
+// ================================================================ RIGHT PANEL
+const cvI = document.getElementById("cvim");
+const cI = cvI.getContext("2d");
+let WI = 0, HI = 0;
+const rs = { x0: 0, y0: 0, size: 0 };     // top: ray space
+const cn = { x0: 0, y0: 0, size: 0 };     // bottom: the split plane
+function layoutI() {
+    const m = 34;
+    const half = HI/2;
+    rs.size = Math.min(WI - 2*m, half - m - 14);
+    rs.x0 = (WI - rs.size)/2; rs.y0 = m - 8;
+    cn.size = Math.min(WI - 2*m, half - m - 14);
+    cn.x0 = (WI - cn.size)/2; cn.y0 = half + 10;
+}
+const rsX = (t) => rs.x0 + (t + RANGE)/(2*RANGE)*rs.size;
+const rsY = (s) => rs.y0 + (RANGE - s)/(2*RANGE)*rs.size;
+const cnX = (dt) => cn.x0 + (dt + DRANGE)/(2*DRANGE)*cn.size;
+const cnY = (ds) => cn.y0 + (DRANGE - ds)/(2*DRANGE)*cn.size;
+function drawChainCurve(M, color, width, alpha) {
+    cI.strokeStyle = color; cI.lineWidth = width; cI.globalAlpha = alpha;
+    const pole = Math.abs(M.c) > 1e-12 ? -M.d/M.c : Infinity;
+    for (const [sa, sb] of [[-RANGE, Math.min(pole-0.3, RANGE)],
+                            [Math.max(pole+0.3, -RANGE), RANGE]]) {
+        if (sb <= sa) continue;
+        cI.beginPath(); let first = true;
+        for (let i = 0; i <= 260; i++) {
+            const s = sa + (sb-sa)*i/260, t = mobius(M, s);
+            if (!isFinite(t) || Math.abs(t) > RANGE*4) { first = true; continue; }
+            first ? cI.moveTo(rsX(t), rsY(s)) : cI.lineTo(rsX(t), rsY(s));
+            first = false;
+        }
+        cI.stroke();
+        if (!isFinite(pole)) break;
+    }
+    cI.globalAlpha = 1;
+}
+function drawRight(brightM, ns, N) {
+    cI.clearRect(0, 0, WI, HI);
+    cI.fillStyle = "#050505"; cI.fillRect(0, 0, WI, HI);
+    layoutI();
+    cI.font = "11px monospace";
+
+    // ---------- top: ray space with the chain family
+    const n = 8;
+    for (let i = 0; i <= n; i++) {
+        const k = i/n;
+        cI.strokeStyle = "#ffd9a0"; cI.globalAlpha = 0.10; cI.lineWidth = 1;
+        cI.beginPath(); cI.moveTo(rs.x0, rs.y0 + k*rs.size);
+        cI.lineTo(rs.x0 + rs.size, rs.y0 + k*rs.size); cI.stroke();
+        cI.strokeStyle = "#a0ffb0";
+        cI.beginPath(); cI.moveTo(rs.x0 + k*rs.size, rs.y0);
+        cI.lineTo(rs.x0 + k*rs.size, rs.y0 + rs.size); cI.stroke();
+    }
+    cI.globalAlpha = 1;
+    cI.strokeStyle = "#444"; cI.strokeRect(rs.x0, rs.y0, rs.size, rs.size);
+    cI.save(); cI.beginPath();
+    cI.rect(rs.x0, rs.y0, rs.size, rs.size); cI.clip();
+    if (!ns && showChains) {
+        for (let k = 0; k < 7; k++) {
+            const T = -150 + 300*k/6;
+            const M = chainThrough(T);
+            if (M) drawChainCurve(M, "#b388ff", 1.1, 0.22);
+        }
+    }
+    if (!ns && brightM && brightM.M)
+        drawChainCurve(brightM.M, "#b388ff", 2.2, 0.95);
+    if (ns) {
+        // Minkowski-parallel: the pencil they share, and the prohibition
+        cI.strokeStyle = "#ffe066"; cI.lineWidth = 1.6; cI.setLineDash([5,4]);
+        if (ns === 1) {
+            const y = rsY(A[0]);
+            cI.beginPath(); cI.moveTo(rs.x0, y);
+            cI.lineTo(rs.x0 + rs.size, y); cI.stroke();
+        } else {
+            const x = rsX(A[1]);
+            cI.beginPath(); cI.moveTo(x, rs.y0);
+            cI.lineTo(x, rs.y0 + rs.size); cI.stroke();
+        }
+        cI.setLineDash([]);
+        if (showLabels) {
+            cI.fillStyle = "#ffe066";
+            cI.fillText("UNJOINABLE \u2014 no chain crosses a pencil twice",
+                        rs.x0 + 8, rs.y0 + rs.size - 10);
+        }
+    }
+    cI.restore();
+    for (const [a, col, name] of [[A, "#ffffff", "A"], [B, "#ff9d6b", "B"]]) {
+        const x = rsX(a[1]), y = rsY(a[0]);
+        cI.save(); cI.shadowColor = col; cI.shadowBlur = 12;
+        cI.fillStyle = col;
+        cI.beginPath(); cI.arc(x, y, 6, 0, 6.2832); cI.fill(); cI.restore();
+        if (showLabels) { cI.fillStyle = col; cI.fillText(name, x+11, y+4); }
+    }
+    if (showLabels) {
+        cI.fillStyle = "#666";
+        cI.fillText("ray space (t \u2192, s \u2191) \u00b7 purple: chains through A and B",
+                    rs.x0 + 6, rs.y0 - 6);
+    }
+
+    // ---------- bottom: the difference plane R (+) R
+    cI.strokeStyle = "#444"; cI.strokeRect(cn.x0, cn.y0, cn.size, cn.size);
+    cI.save(); cI.beginPath();
+    cI.rect(cn.x0, cn.y0, cn.size, cn.size); cI.clip();
+    // invariant hyperbolas Ds*Dt = const (the split plane's "shells")
+    cI.strokeStyle = "#8fa3c0"; cI.lineWidth = 1;
+    for (const lvl of [3000, 12000, 40000]) {
+        for (const sgn of [1, -1]) {
+            cI.globalAlpha = 0.18;
+            for (const branch of [1, -1]) {
+                cI.beginPath(); let first = true;
+                for (let i = 1; i <= 160; i++) {
+                    const dt = branch * DRANGE * i/160;
+                    const ds = sgn*lvl/dt;
+                    if (Math.abs(ds) > DRANGE) { first = true; continue; }
+                    first ? cI.moveTo(cnX(dt), cnY(ds))
+                          : cI.lineTo(cnX(dt), cnY(ds));
+                    first = false;
+                }
+                cI.stroke();
+            }
+        }
+    }
+    cI.globalAlpha = 1;
+    // the light cone: the zero-divisor axes
+    cI.strokeStyle = "#ffe066"; cI.lineWidth = ns ? 2.4 : 1.6;
+    cI.globalAlpha = 0.9;
+    cI.beginPath(); cI.moveTo(cn.x0, cnY(0));
+    cI.lineTo(cn.x0 + cn.size, cnY(0)); cI.stroke();
+    cI.beginPath(); cI.moveTo(cnX(0), cn.y0);
+    cI.lineTo(cnX(0), cn.y0 + cn.size); cI.stroke();
+    cI.globalAlpha = 1;
+    // the hyperbola through the current delta
+    const Ds = B[0]-A[0], Dt = B[1]-A[1];
+    if (!ns) {
+        cI.strokeStyle = "#7fd4ff"; cI.lineWidth = 1.6; cI.globalAlpha = 0.8;
+        for (const branch of [1, -1]) {
+            cI.beginPath(); let first = true;
+            for (let i = 1; i <= 200; i++) {
+                const dt = branch * DRANGE * i/200;
+                const ds = N/dt;
+                if (Math.abs(ds) > DRANGE) { first = true; continue; }
+                first ? cI.moveTo(cnX(dt), cnY(ds)) : cI.lineTo(cnX(dt), cnY(ds));
+                first = false;
+            }
+            cI.stroke();
+        }
+        cI.globalAlpha = 1;
+    }
+    // delta itself
+    const dx = cnX(Dt), dy = cnY(Ds);
+    cI.save(); cI.shadowColor = ns ? "#ffe066" : "#7fd4ff"; cI.shadowBlur = 12;
+    cI.fillStyle = ns ? "#ffe066" : "#7fd4ff";
+    cI.beginPath(); cI.arc(dx, dy, 6, 0, 6.2832); cI.fill(); cI.restore();
+    cI.strokeStyle = ns ? "#ffe066" : "#7fd4ff"; cI.globalAlpha = 0.5;
+    cI.beginPath(); cI.arc(dx, dy, 11, 0, 6.2832); cI.stroke();
+    cI.globalAlpha = 1;
+    if (showLabels) {
+        cI.fillStyle = ns ? "#ffe066" : "#7fd4ff";
+        cI.fillText("\u03b4", dx + 11, dy + 4);
+        cI.fillStyle = "#ffe066";
+        cI.fillText("light cone = zero divisors = the seam",
+                    cn.x0 + 8, cnY(0) - 6);
+        cI.fillStyle = "#8fa3c0";
+        cI.fillText("N > 0", cnX(DRANGE*0.68), cnY(DRANGE*0.80));
+        cI.fillText("N < 0", cnX(-DRANGE*0.85), cnY(DRANGE*0.80));
+    }
+    cI.restore();
+    if (showLabels) {
+        cI.fillStyle = "#666";
+        cI.fillText("difference plane \u03b4 = (\u0394t \u2192, \u0394s \u2191) " +
+                    "\u00b7 N(\u03b4) = \u0394s\u00b7\u0394t \u00b7 drag \u03b4",
+                    cn.x0 + 6, cn.y0 - 6);
+    }
+}
+
+// ================================================================ HUD
+const el = (id) => document.getElementById(id);
+function updateHUD(ns, N, gap) {
+    el("As").textContent = A[0].toFixed(1);
+    el("At").textContent = A[1].toFixed(1);
+    el("Bs").textContent = B[0].toFixed(1);
+    el("Bt").textContent = B[1].toFixed(1);
+    el("ds").textContent = (B[0]-A[0]).toFixed(1);
+    el("dt").textContent = (B[1]-A[1]).toFixed(1);
+    el("norm").textContent = Math.abs(N) < 1e-3
+        ? "0 (NULL)" : N.toFixed(0);
+    el("gap").textContent = gap < 1e-3 ? "0" : gap.toFixed(2);
+    const st = el("state");
+    if (ns) {
+        st.textContent = "NULL (\u0394" + (ns===1?"s":"t") +
+            "=0) \u00b7 MEET in space \u00b7 UNJOINABLE in the image";
+        st.className = "null";
+    } else {
+        st.textContent = "unit \u03b4 \u00b7 SKEW in space \u00b7 JOINABLE " +
+            "(1-param chain family)";
+        st.className = "join";
+    }
+}
+
+// ================================================================ LOOP
+function frame(now) {
+    c3.clearRect(0, 0, W3, H3);
+    c3.fillStyle = "#050505"; c3.fillRect(0, 0, W3, H3);
+    const ns = nullState();
+    const N = (B[0]-A[0])*(B[1]-A[1]);
+    const gap = rayGap(A, B);
+    // bright family member: sweeps the pencil of chains through A and B
+    let brightM = null;
+    if (!ns) {
+        if (sweep) phase += slowMotion ? 0.0022 : 0.008;
+        const T = 150*Math.sin(phase);
+        const M = chainThrough(T);
+        if (M) {
+            const s3 = anchorS();
+            const line = transversalAt(330, A, B, [s3, T]);
+            brightM = { M, line };
+        }
+    }
+    drawScreen3();
+    drawSlits3();
+    drawScene3(brightM, ns);
+    drawRight(brightM, ns, N);
+    updateHUD(ns, N, gap);
+    requestAnimationFrame(frame);
+}
+
+// ================================================================ INPUT
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W3 = cv3.clientWidth; H3 = cv3.clientHeight;
+    cv3.width = W3*dpr; cv3.height = H3*dpr; c3.setTransform(dpr,0,0,dpr,0,0);
+    WI = cvI.clientWidth; HI = cvI.clientHeight;
+    cvI.width = WI*dpr; cvI.height = HI*dpr; cI.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener("resize", resize);
+function pos(cv, e) {
+    const r = cv.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+}
+const clampAddr = (v) => Math.min(RANGE, Math.max(-RANGE, v));
+function snapNull(ray, other) {
+    if (Math.abs(ray[0]-other[0]) < SNAP) ray[0] = other[0];
+    if (Math.abs(ray[1]-other[1]) < SNAP) ray[1] = other[1];
+}
+
+// ---- 3D: drag any of the 4 feet, else orbit
+let drag3 = null;
+cv3.addEventListener("pointerdown", (e) => {
+    cv3.setPointerCapture(e.pointerId);
+    const [px, py] = pos(cv3, e);
+    const cand = [];
+    for (const [ray, name] of [[A,"A"],[B,"B"]]) {
+        const q1 = proj(foot1(ray)), q2 = proj(foot2(ray));
+        cand.push({ d: Math.hypot(px-q1[0], py-q1[1]), ray, foot: 1 });
+        cand.push({ d: Math.hypot(px-q2[0], py-q2[1]), ray, foot: 2 });
+    }
+    cand.sort((a,b) => a.d - b.d);
+    if (cand[0].d < 20) {
+        drag3 = { kind: "foot", ray: cand[0].ray, foot: cand[0].foot };
+        cv3.classList.add("dragging");
+    } else {
+        drag3 = { kind: "orbit", x: px, y: py, yaw: C.yaw, pitch: C.pitch };
+    }
+});
+cv3.addEventListener("pointermove", (e) => {
+    if (!drag3) return;
+    const [px, py] = pos(cv3, e);
+    if (drag3.kind === "foot") {
+        const pr = pointerRay3(px, py);
+        if (drag3.foot === 1)
+            drag3.ray[0] = clampAddr(dragAlongLine([0,0,Zv], [0,1,0], pr));
+        else
+            drag3.ray[1] = clampAddr(dragAlongLine([0,0,Zh], [1,0,0], pr));
+        snapNull(drag3.ray, drag3.ray === A ? B : A);
+    } else {
+        C.yaw   = drag3.yaw   + (px - drag3.x) * 0.006;
+        C.pitch = Math.min(1.35, Math.max(-1.35,
+                  drag3.pitch + (py - drag3.y) * 0.006));
+    }
+});
+window.addEventListener("pointerup", () => {
+    drag3 = null; dragI = null;
+    cv3.classList.remove("dragging"); cvI.classList.remove("dragging");
+});
+cv3.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    C.dist = Math.min(1700, Math.max(320, C.dist * (1 + e.deltaY * 0.001)));
+}, { passive: false });
+let pinchD = 0;
+cv3.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                             e.touches[0].clientY - e.touches[1].clientY);
+        if (pinchD) C.dist = Math.min(1700, Math.max(320, C.dist * pinchD / d));
+        pinchD = d;
+    }
+}, { passive: true });
+cv3.addEventListener("touchend", () => { pinchD = 0; });
+
+// ---- right panel: drag A/B in the top chart, or delta in the cone chart
+let dragI = null;
+cvI.addEventListener("pointerdown", (e) => {
+    cvI.setPointerCapture(e.pointerId);
+    const [px, py] = pos(cvI, e);
+    const cand = [
+        { d: Math.hypot(px - rsX(A[1]), py - rsY(A[0])), kind: "A" },
+        { d: Math.hypot(px - rsX(B[1]), py - rsY(B[0])), kind: "B" },
+        { d: Math.hypot(px - cnX(B[1]-A[1]), py - cnY(B[0]-A[0])), kind: "d" },
+    ].sort((a,b) => a.d - b.d);
+    if (cand[0].d < 26) {
+        dragI = { kind: cand[0].kind }; cvI.classList.add("dragging");
+    }
+});
+cvI.addEventListener("pointermove", (e) => {
+    if (!dragI) return;
+    const [px, py] = pos(cvI, e);
+    if (dragI.kind === "A" || dragI.kind === "B") {
+        const ray = dragI.kind === "A" ? A : B;
+        ray[0] = clampAddr(RANGE - (py - rs.y0)/rs.size*2*RANGE);
+        ray[1] = clampAddr((px - rs.x0)/rs.size*2*RANGE - RANGE);
+        snapNull(ray, ray === A ? B : A);
+    } else {
+        let Ds = DRANGE - (py - cn.y0)/cn.size*2*DRANGE;
+        let Dt = (px - cn.x0)/cn.size*2*DRANGE - DRANGE;
+        if (Math.abs(Ds) < SNAP) Ds = 0;              // snap onto the cone
+        if (Math.abs(Dt) < SNAP) Dt = 0;
+        B[0] = clampAddr(A[0] + Ds);
+        B[1] = clampAddr(A[1] + Dt);
+    }
+});
+
+// ================================================================ BUTTONS
+el("bchains").addEventListener("click", (e) => {
+    showChains = !showChains; e.target.classList.toggle("active", showChains);
+});
+el("bsweep").addEventListener("click", (e) => {
+    sweep = !sweep; e.target.classList.toggle("active", sweep);
+});
+el("bcone").addEventListener("click", () => { B[0] = A[0]; });
+el("blabels").addEventListener("click", (e) => {
+    showLabels = !showLabels; e.target.classList.toggle("active", showLabels);
+});
+el("breset").addEventListener("click", () => {
+    A = [55, -60]; B = [-40, 80];
+    C.yaw = -0.62; C.pitch = 0.30; C.dist = 820;
+});
+
+// ================================================================ GO
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

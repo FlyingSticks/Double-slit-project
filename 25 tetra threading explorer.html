@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tetra Engine: Threading Explorer</title>
+<style>
+    body { margin: 0; padding: 0; background: #050505; color: #fff;
+           font-family: 'Segoe UI', monospace; overflow: hidden;
+           height: 100vh; height: 100dvh; display: flex; flex-direction: column; }
+
+    header { height: 40px; background: #111; border-bottom: 1px solid #333;
+             display: flex; align-items: center; justify-content: space-between;
+             padding: 0 20px; flex-shrink: 0; }
+    h1 { font-size: 14px; margin: 0; color: #e8e8ff; letter-spacing: 1px;
+         text-transform: uppercase; }
+    .tag { background: #16211a; padding: 2px 6px; border-radius: 4px;
+           font-size: 10px; color: #a0ffb0; border: 1px solid #2e6b42;
+           white-space: nowrap; }
+
+    #stage { flex: 1; position: relative; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none;
+             cursor: grab; }
+    canvas.dragP { cursor: move; }
+
+    .overlay-info { position: absolute; top: 10px; left: 10px; z-index: 10;
+        background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 4px;
+        border: 1px solid #444; pointer-events: none; font-family: monospace;
+        font-size: 11px; line-height: 1.7; max-width: 320px; }
+    .info-title { font-size: 12px; font-weight: bold; color: #eee; }
+    .dim { color: #888; }
+    .hl  { color: #fff; font-weight: bold; }
+    .c1  { color: #ffd9a0; }   /* slit 1 amber  */
+    .c2  { color: #a0ffb0; }   /* slit 2 green  */
+    .cS  { color: #7fd4ff; }   /* screen cyan   */
+    .cP  { color: #d0a8ff; }   /* point purple  */
+    #mode.threaded { color: #a0ffb0; }
+    #mode.seam     { color: #ff9d6b; font-weight: bold; }
+    #check { color: #6fdc8c; }
+
+    #controls { position: absolute; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); left: 50%;
+        transform: translateX(-50%); z-index: 10; display: flex; gap: 6px;
+        flex-wrap: wrap; justify-content: center; padding: 0 10px; }
+    button { background: #1a1a22; color: #ccc; border: 1px solid #444;
+        border-radius: 4px; font-family: monospace; font-size: 11px;
+        padding: 6px 10px; cursor: pointer; }
+    button.active { background: #14251a; color: #a0ffb0; border-color: #4d8f61; }
+    button:focus-visible { outline: 2px solid #a0ffb0; }
+
+    @media (max-width: 560px) {
+        h1 { font-size: 11px; }
+        .overlay-info { font-size: 10px; max-width: 240px; line-height: 1.5; }
+    }
+    @media (prefers-reduced-motion: reduce) { /* pencil sweep slows, JS reads this */ }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Threading Explorer <span style="color:#666">//</span> Axiom C1 &middot; Theorem 1</h1>
+    <div class="tag">ONE POINT &middot; ONE RAY</div>
+</header>
+
+<div id="stage">
+    <canvas id="cv"></canvas>
+
+    <div class="overlay-info">
+        <div class="info-title">THE THREADING THEOREM</div>
+        <div><span class="dim">P</span> = <span id="pcoord" class="cP">(0,0,0)</span></div>
+        <div><span class="dim">address</span> (s, t) =
+             (<span id="sval" class="c1">0</span>, <span id="tval" class="c2">0</span>)</div>
+        <div><span class="dim">screen</span> S = <span id="scoord" class="cS">(0,0)</span>
+             &nbsp;<span class="dim">collinear</span> <span id="check">&#10003;</span></div>
+        <div><span class="dim">mode:</span> <span id="mode" class="threaded">THREADED</span></div>
+        <div class="dim" style="font-size:10px; margin-top:4px" id="hint">
+            Drag the purple orb P &mdash; the unique transversal snaps to it.<br>
+            Drag P onto a slit to break the address (the seam).<br>
+            Drag space to orbit &middot; wheel / pinch to zoom.
+        </div>
+    </div>
+
+    <div id="controls">
+        <button id="bplanes">Planes &pi;&#8321;&middot;&pi;&#8322;</button>
+        <button id="bseam1">Seam &#8467;&#8321;</button>
+        <button id="bseam2">Seam &#8467;&#8322;</button>
+        <button id="blabels" class="active">Labels</button>
+        <button id="breset">Reset</button>
+    </div>
+</div>
+
+<script>
+"use strict";
+// ================================================================ RIG
+// Calibrated rig of the Tetra Engine (Level 3 of the hierarchy):
+//   screen (Pi)      : plane z = 0
+//   l1, vertical slit: { (0, s, Zv) }  — line along y at depth Zv
+//   l2, horizontal   : { (t, 0, Zh) }  — line along x at depth Zh
+// l1 is a pinhole in the x–z plane, l2 a pinhole in the y–z plane:
+// the meetings are factorized by coordinate (anamorphic dissociation).
+const Zv = 150, Zh = 250;
+const SLIT_HALF = 170;          // drawn half-length of each slit
+const SCR_HALF  = 140;          // drawn half-size of the screen
+const Z_MIN = 30, Z_MAX = 440;  // draggable depth range for P
+const SNAP = 9;                 // 3D distance at which P snaps onto a slit
+
+// ================================================================ MATH
+// Pure threading formulas (Theorem 1 made explicit).  Given P off the
+// seam, the unique transversal, parametrized by z:
+//   x(z) = Px (z - Zv) / (Pz - Zv)        (l1 governs x)
+//   y(z) = Py (z - Zh) / (Pz - Zh)        (l2 governs y)
+function rayAt(P, z) {
+    return [ P[0] * (z - Zv) / (P[2] - Zv),
+             P[1] * (z - Zh) / (P[2] - Zh), z ];
+}
+function foot1(P) { return rayAt(P, Zv); }        // F1 = (0, s, Zv)
+function foot2(P) { return rayAt(P, Zh); }        // F2 = (t, 0, Zh)
+function screenPt(P) { return rayAt(P, 0); }      // S
+function address(P) { return [ foot1(P)[1], foot2(P)[0] ]; }
+
+// Self-check: |(F2-F1) x (P-F1)| / scale — should be ~machine epsilon.
+function collinearity(P) {
+    const A = foot1(P), B = foot2(P);
+    const u = [B[0]-A[0], B[1]-A[1], B[2]-A[2]];
+    const v = [P[0]-A[0], P[1]-A[1], P[2]-A[2]];
+    const c = [ u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0] ];
+    const n = Math.hypot(c[0],c[1],c[2]);
+    const s = Math.hypot(u[0],u[1],u[2]) * Math.hypot(v[0],v[1],v[2]);
+    return s > 0 ? n / s : 0;
+}
+
+// ================================================================ STATE
+let P = [60, 45, 350];          // Theorem 7's example depth, z = 350
+let seam = 0;                   // 0 none, 1 on l1, 2 on l2
+let seamParam = 0;              // pinned coordinate on the occupied slit
+let showPlanes = false, showLabels = true;
+let t0 = performance.now();
+const slowMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+// Camera (orbit around mid-rig)
+const C = { yaw: -0.62, pitch: 0.34, dist: 760, fl: 640,
+            tx: 0, ty: 0, tz: 200 };
+
+// ================================================================ RENDER
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * DPR; cv.height = H * DPR;
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener("resize", resize);
+
+function rot(p) {                       // world -> view (rotation only)
+    const x = p[0]-C.tx, y = p[1]-C.ty, z = p[2]-C.tz;
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    const x1 =  cy*x + sy*z, z1 = -sy*x + cy*z;
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    return [x1, cp*y - sp*z1, sp*y + cp*z1];
+}
+function proj(p) {                      // world -> canvas px  [x, y, viewz]
+    const v = rot(p);
+    const zc = v[2] + C.dist;
+    const f = C.fl / Math.max(zc, 12);
+    return [W/2 + v[0]*f, H/2 - v[1]*f, zc];
+}
+function invRotDir(d) {                 // view dir -> world dir
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    const y1 = cp*d[1] + sp*d[2], z1 = -sp*d[1] + cp*d[2];
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    return [ cy*d[0] - sy*z1, y1, sy*d[0] + cy*z1 ];
+}
+function camForward() { return invRotDir([0,0,1]); }
+function camEye() {
+    const f = camForward();
+    return [ C.tx - f[0]*C.dist, C.ty - f[1]*C.dist, C.tz - f[2]*C.dist ];
+}
+function pointerRay(px, py) {           // pixel -> world ray {o, d}
+    const d = invRotDir([ (px - W/2)/C.fl, -(py - H/2)/C.fl, 1 ]);
+    return { o: camEye(), d };
+}
+
+// -------- drawing helpers
+function line3(a, b, color, width, alpha, dash) {
+    const A = proj(a), B = proj(b);
+    ctx.save();
+    ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+    ctx.strokeStyle = color; ctx.lineWidth = width || 1;
+    if (dash) ctx.setLineDash(dash);
+    ctx.beginPath(); ctx.moveTo(A[0], A[1]); ctx.lineTo(B[0], B[1]); ctx.stroke();
+    ctx.restore();
+}
+function poly3(pts, fill, alpha) {
+    ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = fill;
+    ctx.beginPath();
+    pts.forEach((p, i) => { const q = proj(p);
+        i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
+    ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function dot3(p, color, r, glow) {
+    const q = proj(p);
+    ctx.save();
+    if (glow) { ctx.shadowColor = color; ctx.shadowBlur = 12; }
+    ctx.fillStyle = color;
+    ctx.beginPath(); ctx.arc(q[0], q[1], r, 0, 6.2832); ctx.fill();
+    ctx.restore();
+    return q;
+}
+function label3(p, text, color, dx, dy) {
+    if (!showLabels) return;
+    const q = proj(p);
+    ctx.save(); ctx.font = "11px monospace"; ctx.fillStyle = color;
+    ctx.globalAlpha = 0.95;
+    ctx.fillText(text, q[0] + (dx||8), q[1] + (dy||-8));
+    ctx.restore();
+}
+
+// -------- scene pieces
+function drawScreen() {
+    const s = SCR_HALF, n = 8;
+    poly3([[-s,-s,0],[s,-s,0],[s,s,0],[-s,s,0]], "#0d1420", 0.55);
+    for (let i = -n; i <= n; i++) {
+        const c = i === 0 ? 0.30 : 0.12, k = s*i/n;
+        line3([k,-s,0],[k,s,0], "#3a5a80", 1, c);
+        line3([-s,k,0],[s,k,0], "#3a5a80", 1, c);
+    }
+    label3([-s, s, 0], "screen \u03a0 (z=0)", "#7fd4ff", 4, -6);
+}
+function drawSlits() {
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 2.5, 1);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 2.5, 1);
+    // faint carrier planes of the slits, for depth reading
+    line3([0,-SLIT_HALF,Zv],[0,SLIT_HALF,Zv], "#ffd9a0", 9, 0.10);
+    line3([-SLIT_HALF,0,Zh],[SLIT_HALF,0,Zh], "#a0ffb0", 9, 0.10);
+    label3([0, SLIT_HALF, Zv], "\u2113\u2081  z=Zv=150", "#ffd9a0");
+    label3([SLIT_HALF, 0, Zh], "\u2113\u2082  z=Zh=250", "#a0ffb0", -80, -10);
+}
+function drawConstructionPlanes() {
+    if (!showPlanes || seam) return;
+    // pi1 = span(P, l1): contains l1 and P.  Quad along l1 and toward P.
+    const u1 = [P[0], 0, P[2]-Zv];                     // reach vector, l1 -> P
+    poly3([ [ -u1[0]*0.25, -SLIT_HALF, Zv - u1[2]*0.25 ],
+            [ -u1[0]*0.25,  SLIT_HALF, Zv - u1[2]*0.25 ],
+            [  u1[0]*1.30,  SLIT_HALF, Zv + u1[2]*1.30 ],
+            [  u1[0]*1.30, -SLIT_HALF, Zv + u1[2]*1.30 ] ], "#ffb35c", 0.10);
+    // pi2 = span(P, l2)
+    const u2 = [0, P[1], P[2]-Zh];
+    poly3([ [ -SLIT_HALF, -u2[1]*0.60, Zh - u2[2]*0.60 ],
+            [  SLIT_HALF, -u2[1]*0.60, Zh - u2[2]*0.60 ],
+            [  SLIT_HALF,  u2[1]*2.20, Zh + u2[2]*2.20 ],
+            [ -SLIT_HALF,  u2[1]*2.20, Zh + u2[2]*2.20 ] ], "#57e07a", 0.10);
+    label3([u1[0]*1.05, -SLIT_HALF*0.8, Zv + u1[2]*1.05],
+           "\u03c0\u2081 = span(P,\u2113\u2081)", "#ffb35c");
+    label3([SLIT_HALF*0.8, u2[1]*1.8, Zh + u2[2]*1.8],
+           "\u03c0\u2082 = span(P,\u2113\u2082)", "#57e07a");
+}
+function drawThreadedRay() {
+    const zA = -30, zB = Z_MAX;
+    line3(rayAt(P, zA), rayAt(P, zB), "#ffffff", 1.6, 0.9);
+    const F1 = foot1(P), F2 = foot2(P), S = screenPt(P);
+    dot3(F1, "#ffd9a0", 4, true);  label3(F1, "F\u2081", "#ffd9a0");
+    dot3(F2, "#a0ffb0", 4, true);  label3(F2, "F\u2082", "#a0ffb0");
+    dot3(S,  "#7fd4ff", 4, true);  label3(S,  "S",       "#7fd4ff");
+}
+function drawPencil(now) {
+    // P sits on a slit: its address blows up.  The point owns the whole
+    // flat pencil — the plane span(p, other slit)  (Axiom C3).
+    const speed = slowMotion ? 0.00035 : 0.0011;
+    const sweep = Math.sin((now - t0) * speed) * (SLIT_HALF - 10);
+    const p = seam === 1 ? [0, seamParam, Zv] : [seamParam, 0, Zh];
+    const other = (q) => seam === 1 ? [q, 0, Zh] : [0, q, Zv];
+    // pencil plane (C3): quad through p spanned by the other slit
+    const o1 = other(-SLIT_HALF), o2 = other(SLIT_HALF);
+    const ext = (a, b, k) => [ a[0]+(b[0]-a[0])*k, a[1]+(b[1]-a[1])*k, a[2]+(b[2]-a[2])*k ];
+    poly3([ ext(p, o1, -0.6), ext(p, o1, 2.2), ext(p, o2, 2.2), ext(p, o2, -0.6) ],
+          seam === 1 ? "#ffb35c" : "#57e07a", 0.08);
+    // ghost fan
+    for (let q = -SLIT_HALF; q <= SLIT_HALF; q += SLIT_HALF/6) {
+        line3(ext(p, other(q), -0.6), ext(p, other(q), 2.2), "#ffffff", 1, 0.10);
+    }
+    // the live sweeping ray
+    const o = other(sweep);
+    line3(ext(p, o, -0.6), ext(p, o, 2.2), "#ffffff", 1.8, 0.95);
+    dot3(o, seam === 1 ? "#a0ffb0" : "#ffd9a0", 4, true);
+    dot3(p, "#ff9d6b", 6, true);
+    label3(p, "p \u2208 seam", "#ff9d6b", 10, -10);
+    return sweep;
+}
+function drawP() {
+    const q = dot3(P, "#d0a8ff", 7, true);
+    ctx.save(); ctx.strokeStyle = "#d0a8ff"; ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.arc(q[0], q[1], 12, 0, 6.2832); ctx.stroke();
+    ctx.restore();
+    label3(P, "P", "#d0a8ff", 14, 4);
+    return q;
+}
+
+// ================================================================ HUD
+const el = (id) => document.getElementById(id);
+function fmt(v) { return (Math.abs(v) < 1e4 ? v.toFixed(1) : v.toExponential(1)); }
+function updateHUD(sweep) {
+    if (seam) {
+        el("pcoord").textContent = seam === 1
+            ? "(0, " + fmt(seamParam) + ", " + Zv + ")"
+            : "(" + fmt(seamParam) + ", 0, " + Zh + ")";
+        const pin = fmt(seamParam), free = fmt(sweep) + " \u2192 FREE";
+        el("sval").textContent = seam === 1 ? pin : free;
+        el("tval").textContent = seam === 1 ? free : pin;
+        el("scoord").textContent = "\u2014";
+        el("check").textContent = "\u2014";
+        el("mode").textContent = "ON THE SEAM (\u2113" +
+            (seam === 1 ? "\u2081" : "\u2082") + ") \u2014 address blows up";
+        el("mode").className = "seam";
+        el("hint").innerHTML =
+            "P owns a whole pencil: one foot pinned, the other free.<br>" +
+            "This flat pencil fills span(p, \u2113" + (seam===1?"\u2082":"\u2081") +
+            ") \u2014 Axiom C3.<br>Drag P off the slit to restore the address.";
+    } else {
+        const a = address(P), S = screenPt(P), c = collinearity(P);
+        el("pcoord").textContent = "(" + fmt(P[0]) + ", " + fmt(P[1]) + ", " + fmt(P[2]) + ")";
+        el("sval").textContent = fmt(a[0]);
+        el("tval").textContent = fmt(a[1]);
+        el("scoord").textContent = "(" + fmt(S[0]) + ", " + fmt(S[1]) + ")";
+        el("check").textContent = "\u2713 " + (c === 0 ? "0" : c.toExponential(0));
+        el("mode").textContent = "THREADED \u2014 unique ray (C1)";
+        el("mode").className = "threaded";
+        el("hint").innerHTML =
+            "Drag the purple orb P \u2014 the unique transversal snaps to it.<br>" +
+            "Drag P onto a slit to break the address (the seam).<br>" +
+            "Drag space to orbit \u00b7 wheel / pinch to zoom.";
+    }
+}
+
+// ================================================================ LOOP
+function frame(now) {
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = "#050505"; ctx.fillRect(0, 0, W, H);
+    drawScreen();
+    drawConstructionPlanes();
+    drawSlits();
+    let sweep = 0;
+    if (seam) sweep = drawPencil(now);
+    else drawThreadedRay();
+    if (!seam) drawP();
+    updateHUD(sweep);
+    requestAnimationFrame(frame);
+}
+
+// ================================================================ INPUT
+let drag = null;            // {kind:'orbit'|'P', ...}
+let pinchD = 0;
+function pPixel() { const q = proj(seam ? seamPoint() : P); return q; }
+function seamPoint() {
+    return seam === 1 ? [0, seamParam, Zv] : [seamParam, 0, Zh];
+}
+function clampP(N) {
+    N[2] = Math.min(Z_MAX, Math.max(Z_MIN, N[2]));
+    // keep the affine chart honest: avoid the two slit planes exactly,
+    // unless the drag lands on the seam itself (handled by snapping)
+    if (Math.abs(N[2] - Zv) < 3) N[2] = Zv + (N[2] >= Zv ? 3 : -3);
+    if (Math.abs(N[2] - Zh) < 3) N[2] = Zh + (N[2] >= Zh ? 3 : -3);
+    N[0] = Math.min(300, Math.max(-300, N[0]));
+    N[1] = Math.min(300, Math.max(-300, N[1]));
+    return N;
+}
+function trySnapSeam(N) {
+    const d1 = Math.hypot(N[0], N[2] - Zv);
+    const d2 = Math.hypot(N[1], N[2] - Zh);
+    if (d1 < SNAP && Math.abs(N[1]) < SLIT_HALF) {
+        seam = 1; seamParam = N[1]; return true;
+    }
+    if (d2 < SNAP && Math.abs(N[0]) < SLIT_HALF) {
+        seam = 2; seamParam = N[0]; return true;
+    }
+    return false;
+}
+function movePTo(px, py) {
+    // move P in the camera-parallel plane through its current position
+    const base = seam ? seamPoint() : P;
+    const r = pointerRay(px, py), n = camForward();
+    const w = [ base[0]-r.o[0], base[1]-r.o[1], base[2]-r.o[2] ];
+    const t = (n[0]*w[0] + n[1]*w[1] + n[2]*w[2]) /
+              (n[0]*r.d[0] + n[1]*r.d[1] + n[2]*r.d[2]);
+    let N = [ r.o[0]+r.d[0]*t, r.o[1]+r.d[1]*t, r.o[2]+r.d[2]*t ];
+    if (trySnapSeam(N)) return;
+    seam = 0;
+    P = clampP(N);
+}
+function pos(e) {
+    const r = cv.getBoundingClientRect();
+    return [e.clientX - r.left, e.clientY - r.top];
+}
+cv.addEventListener("pointerdown", (e) => {
+    cv.setPointerCapture(e.pointerId);
+    const [px, py] = pos(e), q = pPixel();
+    if (Math.hypot(px - q[0], py - q[1]) < 22) {
+        drag = { kind: "P" }; cv.classList.add("dragP");
+    } else {
+        drag = { kind: "orbit", x: px, y: py, yaw: C.yaw, pitch: C.pitch };
+    }
+});
+cv.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const [px, py] = pos(e);
+    if (drag.kind === "P") movePTo(px, py);
+    else {
+        C.yaw   = drag.yaw   + (px - drag.x) * 0.006;
+        C.pitch = Math.min(1.35, Math.max(-1.35,
+                  drag.pitch + (py - drag.y) * 0.006));
+    }
+});
+window.addEventListener("pointerup", () => { drag = null; cv.classList.remove("dragP"); });
+cv.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    C.dist = Math.min(1600, Math.max(320, C.dist * (1 + e.deltaY * 0.001)));
+}, { passive: false });
+cv.addEventListener("touchmove", (e) => {          // pinch zoom
+    if (e.touches.length === 2) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                             e.touches[0].clientY - e.touches[1].clientY);
+        if (pinchD) C.dist = Math.min(1600, Math.max(320, C.dist * pinchD / d));
+        pinchD = d;
+    }
+}, { passive: true });
+cv.addEventListener("touchend", () => { pinchD = 0; });
+
+// ================================================================ BUTTONS
+el("bplanes").addEventListener("click", (e) => {
+    showPlanes = !showPlanes; e.target.classList.toggle("active", showPlanes);
+});
+el("blabels").addEventListener("click", (e) => {
+    showLabels = !showLabels; e.target.classList.toggle("active", showLabels);
+});
+el("bseam1").addEventListener("click", () => { seam = 1; seamParam = 40; });
+el("bseam2").addEventListener("click", () => { seam = 2; seamParam = 40; });
+el("breset").addEventListener("click", () => {
+    seam = 0; P = [60, 45, 350];
+    C.yaw = -0.62; C.pitch = 0.34; C.dist = 760;
+});
+
+// ================================================================ GO
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
