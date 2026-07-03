@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Tetra Engine: Object Codec V2.2</title>
+<style>
+    body { margin: 0; padding: 0; background: #050505; color: #fff;
+           font-family: 'Segoe UI', monospace; overflow: hidden;
+           height: 100vh; height: 100dvh; display: flex;
+           flex-direction: column; }
+
+    header { height: 40px; background: #111; border-bottom: 1px solid #333;
+             display: flex; align-items: center; justify-content: space-between;
+             padding: 0 20px; flex-shrink: 0; }
+    h1 { font-size: 14px; margin: 0; color: #e8e8ff; letter-spacing: 1px;
+         text-transform: uppercase; }
+    .tag { background: #14251a; padding: 2px 6px; border-radius: 4px;
+           font-size: 10px; color: #a0ffb0; border: 1px solid #2e6b42;
+           white-space: nowrap; }
+
+    #stage { flex: 1; display: flex; position: relative; min-height: 0; }
+    .panel { flex: 1; position: relative; min-width: 0; min-height: 0; }
+    .panel + .panel { border-left: 1px solid #222; }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; }
+    #cv3d { cursor: grab; }
+    .panel-cap { position: absolute; top: 8px; left: 10px; z-index: 5;
+        font-family: monospace; font-size: 11px; color: #888;
+        background: rgba(0,0,0,0.7); padding: 2px 8px; border-radius: 3px;
+        border: 1px solid #333; pointer-events: none; letter-spacing: 1px; }
+    .panel-cap b { color: #ddd; }
+
+    .overlay-info { position: absolute; top: 34px; left: 10px; z-index: 10;
+        background: rgba(0,0,0,0.85); padding: 8px 12px; border-radius: 4px;
+        border: 1px solid #444; pointer-events: none; font-family: monospace;
+        font-size: 11px; line-height: 1.7; max-width: 330px; }
+    .dim { color: #888; }
+    .v21 { color: #ff6b6b; }
+    .v22 { color: #6fdc8c; }
+    .act { color: #fff; font-weight: bold; }
+
+    #panel { position: absolute; bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+        left: 50%; transform: translateX(-50%); z-index: 10;
+        width: min(620px, 94vw); background: rgba(10,10,15,0.93);
+        border: 1px solid #333; border-radius: 4px; padding: 8px 14px;
+        font-family: monospace; }
+    #panel label { display: flex; justify-content: space-between;
+        font-size: 10px; color: #888; margin: 3px 0 0; }
+    #panel input[type=range] { width: 100%; accent-color: #a0ffb0;
+        height: 18px; }
+    .btn-row { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap;
+        justify-content: center; }
+    button { background: #1a1a22; color: #ccc; border: 1px solid #444;
+        border-radius: 4px; font-family: monospace; font-size: 11px;
+        padding: 5px 9px; cursor: pointer; }
+    button.active { background: #14251a; color: #a0ffb0; border-color: #4d8f61; }
+    button:focus-visible { outline: 2px solid #a0ffb0; }
+
+    #drophint { position: absolute; inset: 0; display: none; z-index: 50;
+        background: rgba(10,20,14,0.85); border: 2px dashed #4d8f61;
+        align-items: center; justify-content: center; font-size: 18px;
+        color: #a0ffb0; letter-spacing: 2px; pointer-events: none; }
+
+    @media (max-width: 700px), (orientation: portrait) {
+        #stage { flex-direction: column; }
+        .panel + .panel { border-left: none; border-top: 1px solid #222; }
+        .overlay-info { font-size: 10px; line-height: 1.5; max-width: 260px; }
+        h1 { font-size: 11px; }
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Object Codec <span style="color:#666">//</span> Solver V2.2</h1>
+    <div class="tag">3D RIDES ON BLOB SHAPE</div>
+</header>
+
+<div id="stage">
+    <div class="panel">
+        <canvas id="cvch"></canvas>
+        <div class="panel-cap"><b>CHANNEL</b> &mdash; the transmitted 2D frame,
+             post-compression. Depth is the blobs' aspect ratio.</div>
+        <div class="overlay-info">
+            <div><span class="dim">model:</span> <span id="mname">torus</span>
+                 &middot; <span id="npart">160</span> <span class="dim">particles</span></div>
+            <div><span class="dim">channel:</span> JPEG q=<span id="qv">0.55</span>
+                 &middot; <span id="kb">0</span> kB
+                 &middot; <span class="dim">&delta;=</span><span id="dv">0.00</span>px</div>
+            <div><span class="dim">decoded:</span> <span id="nblob">0</span> blobs
+                 &middot; matched <span id="nmatch">0</span>
+                 (<span id="cov">0</span>%)</div>
+            <div><span class="v21">V2.1</span> <span class="dim">bias</span>
+                 <span id="b21">0</span> <span class="dim">RMSE</span>
+                 <span id="r21">0</span> <span id="a21"></span></div>
+            <div><span class="v22">V2.2</span> <span class="dim">bias</span>
+                 <span id="b22">0</span> <span class="dim">RMSE</span>
+                 <span id="r22">0</span> <span id="a22" class="act">&larr;</span></div>
+            <div class="dim" style="font-size:10px; margin-top:4px">
+                Drop a clean .obj anywhere to transmit it.<br>
+                Drag the right panel to orbit &middot; wheel/pinch zoom.<br>
+                Section slider cuts the reconstruction open.
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <canvas id="cv3d"></canvas>
+        <div class="panel-cap"><b>RECONSTRUCTION</b> &mdash; rebuilt from blob
+             shape alone &middot; color = |depth error| (green&lt;3 &rarr; red&gt;20)</div>
+    </div>
+
+    <div id="panel">
+        <label><span>compression quality (JPEG stand-in for H.264)</span>
+               <span id="qlab">0.55</span></label>
+        <input type="range" id="q" min="0.03" max="0.95" step="0.01" value="0.55">
+        <label><span>particles</span><span id="nlab">160</span></label>
+        <input type="range" id="n" min="40" max="320" step="10" value="160">
+        <label><span>target radius r</span><span id="rlab">5</span></label>
+        <input type="range" id="r" min="3" max="7" step="0.5" value="5">
+        <label><span>section cut (along <span id="axlab">X</span>)</span>
+               <span id="clab">off</span></label>
+        <input type="range" id="c" min="-1" max="1.02" step="0.02" value="1.02">
+        <div class="btn-row">
+            <button id="mtorus" class="active">Torus</button>
+            <button id="mknot">Knot</button>
+            <button id="mshell">Shell</button>
+            <button id="s21">V2.1</button>
+            <button id="s22" class="active">V2.2</button>
+            <button id="bspin" class="active">Spin</button>
+            <button id="bghost" class="active">Ghost</button>
+            <button id="baxis">Axis: X</button>
+        </div>
+    </div>
+    <div id="drophint">DROP .OBJ TO TRANSMIT</div>
+</div>
+
+<script>
+"use strict";
+// ================================================================ RIG
+const ZV = 150, ZH = 250;
+const FW = 640, FH = 480, SCALE = 1.6;
+// The rig images a tall, narrow frustum (v-magnification ~2x, u ~0.6x), so
+// the scene box is matched to it: the object is placed anisotropically in
+// physical space and the 3D VIEW divides the scales back out, so you see
+// the undistorted model while the codec runs in honest scene coordinates.
+const Z_MID = 415, SX = 150, SY = 42, SZ = 50;   // z spans [365, 465]
+const VIEW = 80;                                  // view units per model unit
+const HM = 128;
+const magX = z => ZV / (z - ZV);
+const magY = z => ZH / (z - ZH);
+
+// ================================================================ SOLVERS
+// Reference JS port of solver_v22.py (verified headlessly, see
+// check_objectcodec.js): V2.1 verbatim + closed-form Jensen debias + guard.
+function solver21(ar) {
+    const den = ar * ZH - ZV;
+    if (Math.abs(den) < 1e-9) return null;
+    return ZV * ZH * (ar - 1) / den;
+}
+const FACT = [1, 1, 2, 6, 24];
+function zDeriv(n, ar) {                    // K*(-1)^(n+1)*n!*ZH^n / u^(n+1)
+    const u = ZH * ar - ZV, K = ZV * (ZH - ZV);
+    const sign = (n % 2 === 0) ? -1 : 1;
+    return sign * K * FACT[n] * Math.pow(ZH, n) / Math.pow(u, n + 1);
+}
+function solver22(ar, sigma) {
+    const z = solver21(ar);
+    if (z === null) return null;
+    const u = Math.abs(ZH * ar - ZV);
+    const s = Math.min(Math.abs(sigma), 0.25 * u / ZH);   // Taylor guard
+    const s2 = s * s;
+    return z - (0.5 * s2 * zDeriv(2, ar) + 0.125 * s2 * s2 * zDeriv(4, ar));
+}
+const sigmaAR = (ar, hpx, delta) =>
+    hpx > 0 ? (delta / hpx) * Math.sqrt(1 + ar * ar) : 0;
+
+// ================================================================ MODELS
+function torusPts(N) {
+    const p = [];
+    for (let i = 0; i < N; i++) {
+        const th = Math.random() * 6.2832, ph = Math.random() * 6.2832;
+        const w = 0.62 + 0.30 * Math.cos(ph);
+        p.push([w * Math.cos(th), 0.30 * Math.sin(ph), w * Math.sin(th)]);
+    }
+    return p;
+}
+function knotPts(N) {
+    const p = [];
+    for (let i = 0; i < N; i++) {
+        const t = Math.random() * 6.2832;
+        const w = 0.55 + 0.22 * Math.cos(3 * t);
+        const c = [w * Math.cos(2 * t), 0.35 * Math.sin(3 * t),
+                   w * Math.sin(2 * t)];
+        let d = [Math.random()-0.5, Math.random()-0.5, Math.random()-0.5];
+        const nn = Math.hypot(d[0], d[1], d[2]) || 1;
+        p.push([c[0] + 0.12*d[0]/nn, c[1] + 0.12*d[1]/nn, c[2] + 0.12*d[2]/nn]);
+    }
+    return p;
+}
+function shellPts(N) {
+    const p = [];
+    while (p.length < N) {
+        let d = [Math.random()-0.5, Math.random()-0.5, Math.random()-0.5];
+        const nn = Math.hypot(d[0], d[1], d[2]) || 1;
+        d = d.map(v => v / nn * 0.85);
+        if (d[0] > 0 && d[1] > 0) continue;          // the wedge cut
+        p.push(d);
+    }
+    return p;
+}
+// .obj: parse v/f, triangulate fans, area-weighted surface sampling
+function parseOBJ(text) {
+    const verts = [], tris = [];
+    for (const line of text.split("\n")) {
+        const p = line.trim().split(/\s+/);
+        if (p[0] === "v") verts.push([+p[1], +p[2], +p[3]]);
+        else if (p[0] === "f") {
+            const idx = p.slice(1).map(t => {
+                const i = parseInt(t.split("/")[0], 10);
+                return i < 0 ? verts.length + i : i - 1;
+            }).filter(i => i >= 0 && i < verts.length);
+            for (let k = 1; k + 1 < idx.length; k++)
+                tris.push([idx[0], idx[k], idx[k + 1]]);
+        }
+    }
+    return { verts, tris };
+}
+function sampleOBJ(mesh, N) {
+    const { verts, tris } = mesh;
+    if (!tris.length) return null;
+    const cum = []; let A = 0;
+    for (const t of tris) {
+        const a = verts[t[0]], b = verts[t[1]], c = verts[t[2]];
+        const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]];
+        const v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]];
+        const cr = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2],
+                    u[0]*v[1]-u[1]*v[0]];
+        A += 0.5 * Math.hypot(cr[0], cr[1], cr[2]);
+        cum.push(A);
+    }
+    if (!(A > 0)) return null;
+    const pts = [];
+    for (let i = 0; i < N; i++) {
+        const r = Math.random() * A;
+        let lo = 0, hi = cum.length - 1;
+        while (lo < hi) { const m = (lo+hi) >> 1;
+            if (cum[m] < r) lo = m + 1; else hi = m; }
+        const t = tris[lo];
+        const a = verts[t[0]], b = verts[t[1]], c = verts[t[2]];
+        let s = Math.random(), q = Math.random();
+        if (s + q > 1) { s = 1 - s; q = 1 - q; }
+        pts.push([a[0]+s*(b[0]-a[0])+q*(c[0]-a[0]),
+                  a[1]+s*(b[1]-a[1])+q*(c[1]-a[1]),
+                  a[2]+s*(b[2]-a[2])+q*(c[2]-a[2])]);
+    }
+    return pts;
+}
+function normalize(pts) {                    // center + max half-extent -> 1
+    const lo = [1e18,1e18,1e18], hi = [-1e18,-1e18,-1e18];
+    for (const p of pts) for (let k = 0; k < 3; k++) {
+        lo[k] = Math.min(lo[k], p[k]); hi[k] = Math.max(hi[k], p[k]);
+    }
+    const c = [0,1,2].map(k => (lo[k]+hi[k])/2);
+    const e = Math.max(hi[0]-c[0], hi[1]-c[1], hi[2]-c[2]) || 1;
+    return pts.map(p => [(p[0]-c[0])/e, (p[1]-c[1])/e, (p[2]-c[2])/e]);
+}
+
+// ================================================================ STATE
+let modelName = "torus", customMesh = null;
+let N_PART = 160, R_TAR = 5, Q = 0.55;
+let basePts = [];                           // normalized model points
+let spin = true, theta = 0, ghost = true;
+let activeSolver = "22";
+let axis = 0, cut = 1.02;                   // section
+let delta = 0.3, deltaQ = -1;               // calibrated per quality
+let truth = [];                             // per-particle scene truth
+let decoded = [];                           // decode results
+let stats = { nb: 0, nm: 0, b21: 0, r21: 0, b22: 0, r22: 0 };
+let kbLast = 0, busy = false, lastTick = 0;
+const C = { yaw: -0.55, pitch: 0.28, dist: 420, fl: 620 };
+
+const POOL = 1400;                          // dense surface pool; the encoder
+function rebuildModel() {                   // transmits a separated subset
+    if (modelName === "custom" && customMesh) {
+        const s = sampleOBJ(customMesh, POOL);
+        basePts = s ? normalize(s) : [];
+    } else if (modelName === "knot") basePts = normalize(knotPts(POOL));
+    else if (modelName === "shell") basePts = normalize(shellPts(POOL));
+    else basePts = normalize(torusPts(POOL));
+}
+function sceneTruth(th) {
+    const c = Math.cos(th), s = Math.sin(th);
+    return basePts.map(p => {
+        const x = (p[0]*c + p[2]*s) * SX;
+        const y = p[1] * SY;
+        const z = Z_MID + (-p[0]*s + p[2]*c) * SZ;
+        const u = x * ZV / (z - ZV), v = y * ZH / (z - ZH);
+        return { x, y, z, u, v,
+                 cx: FW/2 + u*SCALE, cy: FH/2 + v*SCALE };
+    });
+}
+
+// Encoder-side scheduling: per frame, transmit up to N_PART particles
+// whose projected blobs do not merge (AABB separation with margin) — the
+// blob-merging hazard of A7.5, handled where it belongs: at the encoder.
+// Temporal dithering across frames reveals the full surface.
+function selectTransmit(pool) {
+    const idx = pool.map((_, i) => i);
+    for (let i = idx.length - 1; i > 0; i--) {          // shuffle
+        const j = (Math.random() * (i + 1)) | 0;
+        const t = idx[i]; idx[i] = idx[j]; idx[j] = t;
+    }
+    const out = [];
+    for (const i of idx) {
+        const p = pool[i];
+        const rw = R_TAR * magX(p.z) * SCALE;
+        const rh = R_TAR * magY(p.z) * SCALE;
+        if (p.cx < rw + 4 || p.cx > FW - rw - 4 ||
+            p.cy < rh + 4 || p.cy > FH - rh - 4) continue;
+        let ok = true;
+        for (const q of out) {
+            if (Math.abs(p.cx - q.cx) < rw + q.rw + 3 &&
+                Math.abs(p.cy - q.cy) < rh + q.rh + 3) { ok = false; break; }
+        }
+        if (!ok) continue;
+        out.push({ ...p, rw, rh });
+        if (out.length >= N_PART) break;
+    }
+    return out;
+}
+
+// ================================================================ ENCODE
+const src = document.createElement("canvas");
+src.width = FW; src.height = FH;
+const sctx = src.getContext("2d");
+const ana = document.createElement("canvas");
+ana.width = FW; ana.height = FH;
+const actx = ana.getContext("2d", { willReadFrequently: true });
+
+function renderTruth(tr, ctx) {
+    ctx.fillStyle = "#000"; ctx.fillRect(0, 0, FW, FH);
+    ctx.fillStyle = "#fff";
+    for (const p of tr) {
+        const rw = R_TAR * magX(p.z) * SCALE;
+        const rh = R_TAR * magY(p.z) * SCALE;
+        ctx.beginPath();
+        ctx.ellipse(p.cx, p.cy, rw, rh, 0, 0, 6.2832);
+        ctx.fill();
+    }
+}
+function channel(canvas, q, cb) {           // the compression channel
+    const url = canvas.toDataURL("image/jpeg", q);
+    kbLast = url.length * 0.75 / 1024;
+    const im = new Image();
+    im.onload = () => {
+        actx.drawImage(im, 0, 0);
+        cb(actx.getImageData(0, 0, FW, FH));
+    };
+    im.src = url;
+}
+
+// ================================================================ DECODE
+// demo 24's three-pass recentering half-max FWHM, plus anchorless blob
+// discovery (flood fill), plus BOTH solvers per blob.
+function fwhmScan(d, base, step, origin, limit) {
+    const val = i => d[base + i * step];
+    if (val(origin) < HM) return null;
+    let l = origin, r = origin;
+    while (l > 0 && val(l - 1) >= HM) l--;
+    while (r < limit - 1 && val(r + 1) >= HM) r++;
+    if (l === 0 || r === limit - 1) return null;
+    const fl = l - (HM - val(l)) / (val(l - 1) - val(l));
+    const fr = r + (HM - val(r)) / (val(r + 1) - val(r));
+    return { mid: (fl + fr) / 2, w: fr - fl };
+}
+function decodeBlobAt(d, px, py) {
+    let row = fwhmScan(d, py * FW * 4, 4, px, FW);
+    if (!row) return null;
+    const cx = Math.round(row.mid);
+    const col = fwhmScan(d, cx * 4, FW * 4, py, FH);
+    if (!col) return null;
+    const cy = Math.round(col.mid);
+    row = fwhmScan(d, cy * FW * 4, 4, cx, FW) || row;
+    const w = row.w, h = col.w;
+    if (w < 2 || h < 2 || w > 150 || h > 150) return null;
+    const ar = w / h;
+    if (ar < 0.12 || ar > 0.98) return null;
+    const z21 = solver21(ar);
+    if (z21 === null || z21 < ZH + 15 || z21 > 700) return null;
+    const z22 = solver22(ar, sigmaAR(ar, h, delta));
+    const u = (row.mid - FW/2) / SCALE, v = (col.mid - FH/2) / SCALE;
+    return { mx: row.mid, my: col.mid, u, v, ar, z21, z22 };
+}
+function analyze(img, tr) {
+    const d = img.data;
+    const seen = new Uint8Array(FW * FH);
+    const blobs = [];
+    const stack = new Int32Array(FW * FH);
+    for (let i = 0; i < FW * FH; i++) {
+        if (seen[i] || d[i * 4] < HM) continue;
+        let sp = 0; stack[sp++] = i; seen[i] = 1;
+        let count = 0, best = i, bv = d[i * 4];
+        while (sp > 0) {
+            const j = stack[--sp]; count++;
+            if (d[j * 4] > bv) { bv = d[j * 4]; best = j; }
+            const x = j % FW, y = (j / FW) | 0;
+            if (x > 0      && !seen[j-1]  && d[(j-1)*4]  >= HM) { seen[j-1]=1;  stack[sp++]=j-1; }
+            if (x < FW-1   && !seen[j+1]  && d[(j+1)*4]  >= HM) { seen[j+1]=1;  stack[sp++]=j+1; }
+            if (y > 0      && !seen[j-FW] && d[(j-FW)*4] >= HM) { seen[j-FW]=1; stack[sp++]=j-FW; }
+            if (y < FH-1   && !seen[j+FW] && d[(j+FW)*4] >= HM) { seen[j+FW]=1; stack[sp++]=j+FW; }
+        }
+        if (count >= 6) blobs.push(best);
+    }
+    const out = [];
+    for (const b of blobs) {
+        const r = decodeBlobAt(d, b % FW, (b / FW) | 0);
+        if (r) out.push(r);
+    }
+    // greedy nearest-truth matching within 9 px
+    const taken = new Uint8Array(tr.length);
+    const e21 = [], e22 = [];
+    for (const r of out) {
+        let bi = -1, bd = 81;
+        for (let k = 0; k < tr.length; k++) {
+            if (taken[k]) continue;
+            const dx = r.mx - tr[k].cx, dy = r.my - tr[k].cy;
+            const dd = dx * dx + dy * dy;
+            if (dd < bd) { bd = dd; bi = k; }
+        }
+        if (bi >= 0) {
+            taken[bi] = 1;
+            r.zt = tr[bi].z;
+            e21.push(r.z21 - r.zt);
+            e22.push(r.z22 - r.zt);
+        }
+    }
+    const st = (e) => {
+        if (!e.length) return [0, 0];
+        const m = e.reduce((a, b) => a + b, 0) / e.length;
+        const q = Math.sqrt(e.reduce((a, b) => a + b * b, 0) / e.length);
+        return [m, q];
+    };
+    const [b21, r21] = st(e21), [b22, r22] = st(e22);
+    decoded = out;
+    const k = stats.nm ? 0.75 : 0;               // EMA once running
+    stats = { nb: out.length, nm: e21.length,
+              b21: k*stats.b21 + (1-k)*b21, r21: k*stats.r21 + (1-k)*r21,
+              b22: k*stats.b22 + (1-k)*b22, r22: k*stats.r22 + (1-k)*r22 };
+}
+
+// -------- delta calibration: isolated probes through the same channel
+function calibrate(q, done) {
+    const zs = [372, 392, 412, 432, 452, 462];
+    const cal = document.createElement("canvas");
+    cal.width = FW; cal.height = FH;
+    const cctx = cal.getContext("2d");
+    cctx.fillStyle = "#000"; cctx.fillRect(0, 0, FW, FH);
+    cctx.fillStyle = "#fff";
+    const probes = zs.map((z, i) => {
+        const cx = 70 + i * 100, cy = FH / 2;
+        const rw = R_TAR * magX(z) * SCALE, rh = R_TAR * magY(z) * SCALE;
+        cctx.beginPath(); cctx.ellipse(cx, cy, rw, rh, 0, 0, 6.2832);
+        cctx.fill();
+        return { cx, cy, w: 2 * rw, h: 2 * rh };
+    });
+    const url = cal.toDataURL("image/jpeg", q);
+    const im = new Image();
+    im.onload = () => {
+        const cc = cal.getContext("2d");
+        cc.drawImage(im, 0, 0);
+        const d = cc.getImageData(0, 0, FW, FH).data;
+        const res = [];
+        for (const p of probes) {
+            const row = fwhmScan(d, p.cy * FW * 4, 4, p.cx, FW);
+            const col = row ? fwhmScan(d, Math.round(row.mid) * 4, FW * 4,
+                                       p.cy, FH) : null;
+            if (row && col) { res.push(row.w - p.w); res.push(col.w - p.h); }
+        }
+        delta = res.length
+            ? Math.sqrt(res.reduce((a, b) => a + b * b, 0) / res.length)
+            : 0.3;
+        deltaQ = q;
+        done();
+    };
+    im.src = url;
+}
+
+// -------- pipeline tick
+let history = [];                            // recent ticks' decoded points
+const HIST_MAX = 12;
+function tick() {
+    if (busy || !basePts.length) return;
+    busy = true;
+    const th = theta;
+    const run = () => {
+        truth = selectTransmit(sceneTruth(th));
+        renderTruth(truth, sctx);
+        channel(src, Q, (img) => {
+            analyze(img, truth);
+            history.push({ th, pts: decoded });
+            if (history.length > HIST_MAX) history.shift();
+            busy = false;
+        });
+    };
+    if (deltaQ !== Q) calibrate(Q, run); else run();
+}
+
+// ================================================================ VIEWS
+const cvC = document.getElementById("cvch");
+const ctxC = cvC.getContext("2d");
+const cv3 = document.getElementById("cv3d");
+const ctx3 = cv3.getContext("2d");
+let WC = 0, HC = 0, W3 = 0, H3 = 0;
+
+function drawChannel() {
+    ctxC.fillStyle = "#050505"; ctxC.fillRect(0, 0, WC, HC);
+    const k = Math.min(WC / FW, HC / FH) * 0.96;
+    const w = FW * k, h = FH * k;
+    ctxC.drawImage(ana, (WC - w) / 2, (HC - h) / 2, w, h);
+    ctxC.strokeStyle = "#333";
+    ctxC.strokeRect((WC - w) / 2, (HC - h) / 2, w, h);
+}
+function rot(p) {                          // p in MODEL-unit view coords
+    const x = p[0], y = p[1], z = p[2];
+    const cy = Math.cos(C.yaw), sy = Math.sin(C.yaw);
+    const x1 =  cy * x + sy * z, z1 = -sy * x + cy * z;
+    const cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    return [x1, cp * y - sp * z1, sp * y + cp * z1];
+}
+function proj(p) {
+    const v = rot(p), zc = v[2] + C.dist;
+    const f = C.fl / Math.max(zc, 10);
+    return [W3 / 2 + v[0] * f, H3 / 2 - v[1] * f];
+}
+function toView(x, y, z) {                 // scene -> undistorted model view
+    return [x / SX * VIEW, y / SY * VIEW, (z - Z_MID) / SZ * VIEW];
+}
+function sectionKeep(vw) {                 // section in model units
+    if (cut > 1.0) return true;
+    return vw[axis] / VIEW <= cut;
+}
+function errColor(e) {
+    const t = Math.min(1, Math.max(0, (e - 3) / 17));
+    const hue = 120 * (1 - t);
+    return `hsl(${hue}, 85%, 55%)`;
+}
+function draw3D() {
+    ctx3.fillStyle = "#050505"; ctx3.fillRect(0, 0, W3, H3);
+    // floor grid hint
+    ctx3.strokeStyle = "#1c2733"; ctx3.lineWidth = 1;
+    for (let i = -3; i <= 3; i++) {
+        const a = proj([i * 33, -VIEW - 12, -100]);
+        const b = proj([i * 33, -VIEW - 12, 100]);
+        ctx3.beginPath(); ctx3.moveTo(a[0], a[1]); ctx3.lineTo(b[0], b[1]);
+        ctx3.stroke();
+        const c2 = proj([-100, -VIEW - 12, i * 33]);
+        const d2 = proj([100, -VIEW - 12, i * 33]);
+        ctx3.beginPath(); ctx3.moveTo(c2[0], c2[1]); ctx3.lineTo(d2[0], d2[1]);
+        ctx3.stroke();
+    }
+    if (ghost) {
+        ctx3.fillStyle = "rgba(150,160,180,0.22)";
+        for (const p of basePts) {               // the full model, at rest
+            const vw = [p[0]*VIEW, p[1]*VIEW, p[2]*VIEW];
+            if (!sectionKeep(vw)) continue;
+            const q = proj(vw);
+            ctx3.fillRect(q[0] - 1, q[1] - 1, 2, 2);
+        }
+    }
+    // decoded points from recent ticks, un-spun into the model frame:
+    // the reconstruction sits still while the rig samples around it.
+    for (let hi = 0; hi < history.length; hi++) {
+        const { th, pts } = history[hi];
+        const cs = Math.cos(th), sn = Math.sin(th);
+        const age = (history.length - 1 - hi) / HIST_MAX;
+        ctx3.globalAlpha = 1.0 - 0.7 * age;
+        for (const r of pts) {
+            const z = activeSolver === "22" ? r.z22 : r.z21;
+            if (z === null) continue;
+            const x = r.u * (z - ZV) / ZV, y = r.v * (z - ZH) / ZH;
+            const a = x / SX, b = (z - Z_MID) / SZ;
+            const vw = [(a*cs - b*sn) * VIEW, y / SY * VIEW,
+                        (a*sn + b*cs) * VIEW];
+            if (!sectionKeep(vw)) continue;
+            const q = proj(vw);
+            ctx3.fillStyle = r.zt !== undefined
+                ? errColor(Math.abs(z - r.zt)) : "#8fa3c0";
+            ctx3.fillRect(q[0] - 1.5, q[1] - 1.5, 3.5, 3.5);
+        }
+    }
+    ctx3.globalAlpha = 1;
+}
+
+// ================================================================ HUD
+const el = (id) => document.getElementById(id);
+function updateHUD() {
+    el("mname").textContent = modelName;
+    el("npart").textContent = truth.length + "/" + N_PART;
+    el("qv").textContent = Q.toFixed(2);
+    el("kb").textContent = kbLast.toFixed(1);
+    el("dv").textContent = delta.toFixed(2);
+    el("nblob").textContent = stats.nb;
+    el("nmatch").textContent = stats.nm + "/" + truth.length;
+    el("cov").textContent = truth.length
+        ? Math.round(100 * stats.nm / truth.length) : 0;
+    el("b21").textContent = (stats.b21 >= 0 ? "+" : "") + stats.b21.toFixed(2);
+    el("r21").textContent = stats.r21.toFixed(2);
+    el("b22").textContent = (stats.b22 >= 0 ? "+" : "") + stats.b22.toFixed(2);
+    el("r22").textContent = stats.r22.toFixed(2);
+    el("a21").innerHTML = activeSolver === "21" ? "&larr;" : "";
+    el("a22").innerHTML = activeSolver === "22" ? "&larr;" : "";
+    el("a21").className = activeSolver === "21" ? "act" : "";
+    el("a22").className = activeSolver === "22" ? "act" : "";
+}
+
+// ================================================================ LOOP
+function frame(now) {
+    if (spin) theta += 0.0016;
+    if (now - lastTick > 260) { lastTick = now; tick(); }
+    drawChannel();
+    draw3D();
+    updateHUD();
+    requestAnimationFrame(frame);
+}
+
+// ================================================================ INPUT
+function resize() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    WC = cvC.clientWidth; HC = cvC.clientHeight;
+    cvC.width = WC * dpr; cvC.height = HC * dpr;
+    ctxC.setTransform(dpr, 0, 0, dpr, 0, 0);
+    W3 = cv3.clientWidth; H3 = cv3.clientHeight;
+    cv3.width = W3 * dpr; cv3.height = H3 * dpr;
+    ctx3.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+window.addEventListener("resize", resize);
+let drag = null, pinchD = 0;
+cv3.addEventListener("pointerdown", (e) => {
+    cv3.setPointerCapture(e.pointerId);
+    drag = { x: e.clientX, y: e.clientY, yaw: C.yaw, pitch: C.pitch };
+});
+cv3.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    C.yaw = drag.yaw + (e.clientX - drag.x) * 0.006;
+    C.pitch = Math.min(1.35, Math.max(-1.35,
+              drag.pitch + (e.clientY - drag.y) * 0.006));
+});
+window.addEventListener("pointerup", () => { drag = null; });
+cv3.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    C.dist = Math.min(1200, Math.max(180, C.dist * (1 + e.deltaY * 0.001)));
+}, { passive: false });
+cv3.addEventListener("touchmove", (e) => {
+    if (e.touches.length === 2) {
+        const d = Math.hypot(e.touches[0].clientX - e.touches[1].clientX,
+                             e.touches[0].clientY - e.touches[1].clientY);
+        if (pinchD) C.dist = Math.min(1200, Math.max(180, C.dist * pinchD / d));
+        pinchD = d;
+    }
+}, { passive: true });
+cv3.addEventListener("touchend", () => { pinchD = 0; });
+
+// ---- drag & drop .obj
+const hint = el("drophint");
+window.addEventListener("dragover", (e) => {
+    e.preventDefault(); hint.style.display = "flex";
+});
+window.addEventListener("dragleave", (e) => {
+    if (!e.relatedTarget) hint.style.display = "none";
+});
+window.addEventListener("drop", (e) => {
+    e.preventDefault(); hint.style.display = "none";
+    const f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+        const mesh = parseOBJ(String(rd.result));
+        if (mesh.tris.length) {
+            customMesh = mesh;
+            modelName = "custom";
+            ["mtorus","mknot","mshell"].forEach(id =>
+                el(id).classList.remove("active"));
+            el("mname").textContent =
+                (f.name || "custom") + " (" + mesh.tris.length + " tris)";
+            rebuildModel();
+        }
+    };
+    rd.readAsText(f);
+});
+
+// ================================================================ CONTROLS
+el("q").addEventListener("input", (e) => {
+    Q = +e.target.value; el("qlab").textContent = Q.toFixed(2);
+});
+el("n").addEventListener("input", (e) => {
+    N_PART = +e.target.value; el("nlab").textContent = N_PART;
+    rebuildModel();
+});
+el("r").addEventListener("input", (e) => {
+    R_TAR = +e.target.value; el("rlab").textContent = R_TAR;
+    deltaQ = -1;                                  // re-calibrate on r change
+});
+el("c").addEventListener("input", (e) => {
+    cut = +e.target.value;
+    el("clab").textContent = cut > 1.0 ? "off" : cut.toFixed(2);
+});
+function pickModel(name, btn) {
+    modelName = name;
+    ["mtorus","mknot","mshell"].forEach(id =>
+        el(id).classList.toggle("active", id === btn));
+    rebuildModel();
+}
+el("mtorus").addEventListener("click", () => pickModel("torus", "mtorus"));
+el("mknot").addEventListener("click", () => pickModel("knot", "mknot"));
+el("mshell").addEventListener("click", () => pickModel("shell", "mshell"));
+el("s21").addEventListener("click", () => {
+    activeSolver = "21";
+    el("s21").classList.add("active"); el("s22").classList.remove("active");
+});
+el("s22").addEventListener("click", () => {
+    activeSolver = "22";
+    el("s22").classList.add("active"); el("s21").classList.remove("active");
+});
+el("bspin").addEventListener("click", (e) => {
+    spin = !spin; e.target.classList.toggle("active", spin);
+});
+el("bghost").addEventListener("click", (e) => {
+    ghost = !ghost; e.target.classList.toggle("active", ghost);
+});
+el("baxis").addEventListener("click", (e) => {
+    axis = (axis + 1) % 3;
+    const nm = "XYZ"[axis];
+    e.target.textContent = "Axis: " + nm;
+    el("axlab").textContent = nm;
+});
+
+// ================================================================ GO
+rebuildModel();
+resize();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
