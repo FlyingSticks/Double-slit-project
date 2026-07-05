@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Double-Slit Project</title>
+<style>
+    :root { --acc: #6a4bb0; }
+    body { margin: 0; padding: 0; background: #f5f5f7; color: #33333a;
+           font-family: 'Segoe UI', monospace; line-height: 1.6; }
+    header { position: sticky; top: 0; height: 44px; background: #ffffff;
+             border-bottom: 1px solid #e0e0e6; display: flex; align-items: center;
+             justify-content: space-between; padding: 0 20px; z-index: 10; }
+    h1 { font-size: 14px; margin: 0; color: #24243a; letter-spacing: 1px;
+         text-transform: uppercase; }
+    .tag { background: #ece4f7; padding: 2px 8px; border-radius: 4px;
+           font-size: 10px; color: var(--acc); border: 1px solid #d3c4ec;
+           white-space: nowrap; }
+
+    #wrap { max-width: 940px; margin: 0 auto; padding: 26px 18px 60px; }
+
+    /* ---- featured companion ---- */
+    .feature { display: block; text-decoration: none; color: inherit;
+        background: linear-gradient(180deg, #efe9fa 0%, #e9e9ee 100%);
+        border: 1px solid #d3c4ec; border-left: 4px solid var(--acc);
+        border-radius: 8px; padding: 22px 24px; margin-bottom: 8px; }
+    .feature:hover { border-color: var(--acc); background: #ece4f7; }
+    .feature .kicker { font-size: 10px; letter-spacing: 2px; color: var(--acc);
+        text-transform: uppercase; margin-bottom: 6px; }
+    .feature h2 { margin: 0 0 6px; font-size: 26px; font-weight: bold;
+        color: #1a1a1e; letter-spacing: 0.5px; }
+    .feature p { margin: 0; font-size: 13px; color: #55555c; }
+    .feature .arrow { color: var(--acc); }
+    .startnote { font-size: 11px; color: #6a6a72; margin: 8px 2px 30px; }
+
+    h3 { font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+         color: #55555c; border-bottom: 1px solid #dedee3; padding-bottom: 6px;
+         margin: 30px 0 4px; }
+
+    ul { list-style: none; margin: 0; padding: 0; }
+    li { border-bottom: 1px solid #e6e6eb; }
+    li a { display: flex; align-items: baseline; gap: 10px; padding: 9px 8px;
+        text-decoration: none; color: #40404a; font-size: 13px; }
+    li a:hover { background: #ececf0; color: #16161c; }
+    .fn { color: #1668b8; }
+    li a:hover .fn { color: #0f5290; }
+    .note { color: #6a6a72; font-size: 11px; margin-left: auto; text-align: right;
+        padding-left: 12px; }
+    .ext { color: #83838d; font-size: 10px; text-transform: uppercase;
+        min-width: 34px; }
+
+    footer { max-width: 940px; margin: 0 auto; padding: 0 18px 40px;
+             font-size: 11px; color: #66666c; border-top: 1px solid #dedee3;
+             padding-top: 16px; }
+    @media (max-width: 560px) {
+        h1 { font-size: 11px; } .feature h2 { font-size: 20px; }
+        .note { display: none; }
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Double-Slit Project</h1>
+    <div class="tag">TETRA ENGINE</div>
+</header>
+
+<div id="wrap">
+
+    <a class="feature" href="geometry companion.html">
+        <div class="kicker">Start here &mdash; the key to everything below</div>
+        <h2>Interactive Companion <span class="arrow">&rarr;</span></h2>
+        <p>A guided launcher for the interactive diagrams (demos 25&ndash;34),
+           each mapped to the axiom or theorem it illustrates in the geometry
+           papers. The single door into the whole project.</p>
+    </a>
+    <div class="startnote">
+        New here? Open the companion first; it threads the demos and documents
+        together in reading order. The full file list follows for direct access.
+    </div>
+
+    <h3>Papers</h3>
+    <ul>
+        <li><a href="double slit geometry.pdf"><span class="ext">pdf</span>
+            <span class="fn">Double-Slit Geometry</span>
+            <span class="note">definitions, axioms, theorems</span></a></li>
+        <li><a href="double_slit_geometry_section9.pdf"><span class="ext">pdf</span>
+            <span class="fn">&sect;9 &middot; The Tetrahedral Atlas</span>
+            <span class="note">Theorem 9 &middot; insertion for the main paper</span></a></li>
+        <li><a href="The Seam.pdf"><span class="ext">pdf</span>
+            <span class="fn">The Seam</span>
+            <span class="note">commentary on Axiom C2</span></a></li>
+        <li><a href="cross_slit_essay.pdf"><span class="ext">pdf</span>
+            <span class="fn">The Exact Refusal</span>
+            <span class="note">essay &middot; the project drawn together</span></a></li>
+        <li><a href="double_slit_geometry_essay.pdf"><span class="ext">pdf</span>
+            <span class="fn">Double-Slit Geometry &mdash; the Essay</span>
+            <span class="note">stand-alone &middot; computed figures</span></a></li>
+        <li><a href="euclids_five_revisited.pdf"><span class="ext">pdf</span>
+            <span class="fn">Euclid's Five, Revisited</span>
+            <span class="note">short companion &middot; five postulates, five fates</span></a></li>
+        <li><a href="geometry addenda.pdf"><span class="ext">pdf</span>
+            <span class="fn">Geometry Addenda</span>
+            <span class="note">A1&ndash;A8 &middot; findings from the demo series</span></a></li>
+        <li><a href="A9_orbit_collapse.pdf"><span class="ext">pdf</span>
+            <span class="fn">A9 &middot; Orbit Collapse</span>
+            <span class="note">the one collapse the double slit admits</span></a></li>
+        <li><a href="A10_stereopsis.pdf"><span class="ext">pdf</span>
+            <span class="fn">A10 &middot; Stereopsis of the Dual Rig</span>
+            <span class="note">epipolar identity &middot; horopter &middot; acuity law</span></a></li>
+    </ul>
+
+    <h3>Interactive Diagrams</h3>
+    <ul>
+        <li><a href="22 tetra STU skewer.html"><span class="ext">html</span>
+            <span class="fn">22 &middot; STU Skewer</span>
+            <span class="note">Ray(S,T) &rarr; pixel, no camera matrix</span></a></li>
+        <li><a href="23 tetra FCC crossslit.html"><span class="ext">html</span>
+            <span class="fn">23 &middot; FCC Cross-Slit</span>
+            <span class="note">self-contained cross-slit engine</span></a></li>
+        <li><a href="24 tetra gauntlet live.html"><span class="ext">html</span>
+            <span class="fn">24 &middot; Gauntlet (live)</span>
+            <span class="note">browser compression gauntlet</span></a></li>
+        <li><a href="25 tetra threading explorer.html"><span class="ext">html</span>
+            <span class="fn">25 &middot; Threading Explorer</span>
+            <span class="note">Axiom C1 &middot; Theorem 1</span></a></li>
+        <li><a href="26 tetra dual view.html"><span class="ext">html</span>
+            <span class="fn">26 &middot; Dual View</span>
+            <span class="note">D3 &middot; M0 &middot; Axiom C2</span></a></li>
+        <li><a href="27 tetra aperture crossratio.html"><span class="ext">html</span>
+            <span class="fn">27 &middot; Aperture Cross-Ratio</span>
+            <span class="note">Theorem 7 &middot; Solver V2.1</span></a></li>
+        <li><a href="28 tetra bowing.html"><span class="ext">html</span>
+            <span class="fn">28 &middot; Bowing Theorem</span>
+            <span class="note">Theorem 3 &middot; all three cases</span></a></li>
+        <li><a href="29 tetra chain criterion.html"><span class="ext">html</span>
+            <span class="fn">29 &middot; Chain Criterion</span>
+            <span class="note">Theorem 6b &middot; D8 &middot; Theorem 4</span></a></li>
+        <li><a href="30 tetra depth gauge.html"><span class="ext">html</span>
+            <span class="fn">30 &middot; Depth Gauge</span>
+            <span class="note">Theorem 5.3 &middot; the kernel</span></a></li>
+        <li><a href="31 tetra pinhole collapse.html"><span class="ext">html</span>
+            <span class="fn">31 &middot; Pinhole Collapse</span>
+            <span class="note">Theorem 8 &middot; degeneration</span></a></li>
+        <li><a href="32 tetra incidence inversion.html"><span class="ext">html</span>
+            <span class="fn">32 &middot; Incidence Inversion</span>
+            <span class="note">The Seam &sect;4&ndash;5</span></a></li>
+        <li><a href="33 tetra codec v22 object.html"><span class="ext">html</span>
+            <span class="fn">33 &middot; Object Codec (V2.2)</span>
+            <span class="note">drag-and-drop .obj &middot; Jensen debias</span></a></li>
+        <li><a href="34 tetra dual crossslit.html"><span class="ext">html</span>
+            <span class="fn">34 &middot; Dual Cross-Slit</span>
+            <span class="note">two channels &middot; shape stereopsis &middot; A10</span></a></li>
+    </ul>
+
+    <h3>Verification &mdash; theorem checks</h3>
+    <ul>
+        <li><a href="geometry checks.py"><span class="ext">py</span>
+            <span class="fn">geometry checks</span>
+            <span class="note">master verification script</span></a></li>
+        <li><a href="geometry checks.pdf"><span class="ext">pdf</span>
+            <span class="fn">geometry checks</span>
+            <span class="note">rendered output</span></a></li>
+        <li><a href="check threading.pdf"><span class="ext">pdf</span>
+            <span class="fn">check threading</span>
+            <span class="note">demo 25</span></a></li>
+        <li><a href="check dualview.pdf"><span class="ext">pdf</span>
+            <span class="fn">check dualview</span>
+            <span class="note">demo 26</span></a></li>
+        <li><a href="check bowing.pdf"><span class="ext">pdf</span>
+            <span class="fn">check bowing</span>
+            <span class="note">demo 28</span></a></li>
+        <li><a href="check chaincriterion.pdf"><span class="ext">pdf</span>
+            <span class="fn">check chaincriterion</span>
+            <span class="note">demo 29</span></a></li>
+        <li><a href="check depthgauge.pdf"><span class="ext">pdf</span>
+            <span class="fn">check depthgauge</span>
+            <span class="note">demo 30</span></a></li>
+        <li><a href="check pinholecollapse.pdf"><span class="ext">pdf</span>
+            <span class="fn">check pinholecollapse</span>
+            <span class="note">demo 31</span></a></li>
+        <li><a href="check_dual_rig.js"><span class="ext">js</span>
+            <span class="fn">check_dual_rig</span>
+            <span class="note">demo 34 &middot; dual-rig identities</span></a></li>
+        <li><a href="atlas_checks.py"><span class="ext">py</span>
+            <span class="fn">atlas_checks</span>
+            <span class="note">&sect;9 &middot; 15 checks</span></a></li>
+        <li><a href="check_orbitcollapse.js"><span class="ext">js</span>
+            <span class="fn">check_orbitcollapse</span>
+            <span class="note">A9 &middot; 22 assertions</span></a></li>
+        <li><a href="check_stereopsis.js"><span class="ext">js</span>
+            <span class="fn">check_stereopsis</span>
+            <span class="note">A10 &middot; 22 assertions</span></a></li>
+        <li><a href="check_euclids_five.js"><span class="ext">js</span>
+            <span class="fn">check_euclids_five</span>
+            <span class="note">companion doc &middot; 20 assertions</span></a></li>
+        <li><a href="check_geometry_essay.js"><span class="ext">js</span>
+            <span class="fn">check_geometry_essay</span>
+            <span class="note">essay figures &middot; 28 assertions</span></a></li>
+    </ul>
+
+    <h3>Engine source</h3>
+    <ul>
+        <li><a href="compiler.py"><span class="ext">py</span>
+            <span class="fn">compiler.py</span>
+            <span class="note">FCC parity, Hopper, cross-slit</span></a></li>
+        <li><a href="main.cpp"><span class="ext">cpp</span>
+            <span class="fn">main.cpp</span>
+            <span class="note">engine entry &middot; slit-separation control</span></a></li>
+        <li><a href="VoxelGrid.c"><span class="ext">c</span>
+            <span class="fn">VoxelGrid.c</span>
+            <span class="note">voxel lattice</span></a></li>
+    </ul>
+
+</div>
+
+<footer>
+    Double-Slit Project &middot; Tetra Engine &middot; flyingsticks.github.io.
+    Cross-slit (X-slit) projection, FCC lattice, and a cross-ratio depth codec.
+    All interactive diagrams are single dependency-free HTML files and run
+    offline.
+</footer>
+</body>
+</html>
