@@ -1,0 +1,2433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>37 · Station Point to Slits — one control between two projections</title>
+<style>
+  :root{
+    --cream:#FAF4E6; --paper:#F3EAD3; --ink:#34232E; --faint:#e4d9bf;
+    --plum:#6D2C56; --purple:#6A3B96; --crimson:#B23140; --blue:#2F5FA6;
+    --gold:#B07D22; --green:#3C6B4E; --good:#3C6B4E; --muted:rgba(52,35,46,0.55);
+    --serif:"Iowan Old Style","Palatino Linotype",Georgia,serif; --sans:"Helvetica Neue",Arial,sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--cream);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:860px;margin:0 auto;padding:18px 12px 40px;}
+  .eyebrow{font-size:11px;letter-spacing:.22em;color:var(--plum);font-weight:600;text-transform:uppercase;}
+  h1{font-family:var(--serif);font-weight:700;font-size:clamp(21px,4vw,29px);line-height:1.12;margin:5px 0 10px;}
+  h1 em{font-style:italic;color:var(--plum);}
+  .card{background:var(--paper);border:1px solid var(--faint);border-radius:5px;box-shadow:0 6px 22px rgba(52,35,46,.08);padding:9px 11px 7px;margin-bottom:10px;}
+  svg{width:100%;height:auto;display:block;border-radius:4px;background:#fbf7ec;} #view{aspect-ratio:640/440;}
+  .rowbtn{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:8px 2px 2px;} .tag{font-size:11px;color:var(--muted);letter-spacing:.06em;}
+  button{font-family:inherit;font-size:12px;color:var(--ink);background:var(--cream);border:1px solid var(--muted);border-radius:20px;padding:6px 11px;cursor:pointer;}
+  button.on{background:var(--ink);color:var(--cream);border-color:var(--ink);}
+  button.pull{border-color:var(--plum);color:var(--plum);font-weight:700;} button.pull.on{background:var(--plum);color:#fff;}
+  .ctl{display:grid;grid-template-columns:auto 1fr auto;gap:6px 10px;align-items:center;margin:8px 2px 2px;}
+  .ctl label{font-size:11.5px;color:var(--muted);} .ctl .val{font-family:var(--serif);font-size:12.5px;min-width:120px;text-align:right;}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:5px;border-radius:5px;outline:none;}
+  #sD{background:linear-gradient(90deg,var(--plum),var(--faint));} #sP{background:linear-gradient(90deg,var(--gold),var(--faint));}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--cream);border:2.5px solid var(--ink);cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.22);}
+  input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--cream);border:2.5px solid var(--ink);cursor:pointer;}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 12px;margin:8px 2px 6px;}
+  .cell{background:var(--paper);border:1px solid var(--faint);border-radius:6px;padding:8px 10px;}
+  .cell .k{font-size:10px;letter-spacing:.1em;color:var(--muted);text-transform:uppercase;} .cell .v{font-family:var(--serif);font-size:15px;margin-top:2px;}
+  .wide{grid-column:1 / -1;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;}
+  .badge{font-size:11.5px;font-weight:700;color:#fff;background:var(--good);border-radius:20px;padding:3px 10px;}
+  .sub{font-size:12.5px;color:var(--muted);line-height:1.55;margin:8px 2px 10px;} .sub b{color:var(--ink);} .sub em{color:var(--plum);font-style:italic;}
+  .foot{font-size:12px;color:var(--muted);line-height:1.55;margin:2px 4px 0;} .foot b{color:var(--ink);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="eyebrow">Tetra Engine · Drafting Board · Sheet 37</div>
+  <h1>Station point to slits — <em>one control between two projections</em></h1>
+
+  <div class="card">
+    <svg id="view" viewBox="0 0 640 440" role="img" aria-label="A complete presentation drawing of the chosen scene, morphing live between one-point perspective and cross-slit projection as the station point is pulled apart into two slits."></svg>
+    <div class="rowbtn">
+      <span class="tag">SCENE:</span>
+      <button id="scCol" class="on">colonnade section</button>
+      <button id="scRoom">gridded room</button>
+      <button id="scSite">site plan · relief</button>
+      <button id="scCorr">deep corridor</button>
+      <button id="scHouse">house plan ▾</button>
+      <button id="bOrient">⟳ orientation</button>
+      <button id="bPull" class="pull">⇄ pull the station point into slits</button>
+      <button id="bFlip">⇅ flip slit order</button>
+    </div>
+    <div class="ctl">
+      <label>slit spread D (0 = one station point)</label>
+      <input id="sD" type="range" min="0" max="100" value="0" step="1">
+      <span class="val" id="vD">D = 0 · perspective</span>
+      <label>station depth Zp (field of view)</label>
+      <input id="sP" type="range" min="170" max="330" value="200" step="2">
+      <span class="val" id="vP">Zp = 200</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <div class="cell"><div class="k">projection</div><div class="v math" id="oProj">—</div></div>
+    <div class="cell"><div class="k">horizontal FOV</div><div class="v math" id="oFov">—</div></div>
+    <div class="cell"><div class="k">marginal splay (vs perspective)</div><div class="v math" id="oSplay">—</div></div>
+    <div class="cell"><div class="k">depth-line bow</div><div class="v math" id="oBow">—</div></div>
+    <div class="cell"><div class="k">gauge square aspect</div><div class="v math" id="oAR">—</div></div>
+    <div class="cell"><div class="k">decoded depth (true)</div><div class="v math" id="oZ">—</div></div>
+    <div class="cell wide"><div><div class="k">the reading</div><div class="v math" id="oMsg" style="font-size:13.5px;">—</div></div><span class="badge" id="oBadge">—</span></div>
+  </div>
+
+  <p class="sub"><b>The complement, as one instrument.</b> Perspective spends its fidelity on <b>depth</b> — an
+  unbounded size cue, marginal splay at wide angles. Cross-slit spends it on <b>breadth</b> — gentler horizontal
+  convergence (the splay <em>halves</em>), a metric aspect gauge, at the price of bowed depth lines and a
+  <b>bounded</b> depth cue that saturates at Zv/Zh. So: deep-and-narrow scenes → keep the station point whole;
+  broad-and-shallow, relief-like scenes with a solid background → <em>pull it apart</em>. The corridor preset shows
+  the flip honestly: pull it apart there and the bow grows while the far end saturates — that scene belongs to
+  perspective, exactly as your sheet says.</p>
+
+  <p class="sub"><b>House plan</b> is an imported SketchUp model — a floor plan cut at the 5-foot line, walls
+  extruded to their tops. It is baked as a <b>bird's-eye</b>: you look straight down the wall-height axis, so the
+  projection reveals the <b>thickness of the walls</b> as depth. Since the export's north wasn't fixed, the
+  <b>⟳ orientation</b> button rotates the plan in 90° steps — cycle to the reading you want. Then pull the station
+  into slits to compare the one-point downward view with the cross-slit one on your own geometry.</p>
+
+  <p class="foot">
+    The morph is exact: <b>Zv = Zp − D/2, Zh = Zp + D/2</b>; at D = 0 the map is <em>identically</em> the pinhole at
+    Zp (checked to machine precision), at D = 100 it is the standing rig. Every picture here is a complete
+    projection of the scene — faces painter-sorted, receding edges drawn as the true hyperbolic arcs. Verified in
+    <code>check station morph.js</code> — 13 checks: the reduction, the monotone aspect morph and its exact decode,
+    the halved splay and the disclosed y-trade, the bow-vs-depth ordering, and the bounded depth cue.
+  </p>
+</div>
+
+<script id="houseobj" type="text/plain">
+# Alias OBJ Model File
+# Exported from SketchUp, (c) 2000-2012 Trimble Navigation Limited
+# File units = inches
+
+mtllib Cross-slit-plan.mtl
+
+g Mesh1 Model
+
+usemtl FrontColor
+v 12 0 288
+vt 12 -288
+vn 0 1 -0
+v 6 0 282
+vt 6 -282
+v 6 0 288
+vt 6 -288
+f 1/1/1 2/2/1 3/3/1
+
+v 129.819 0 282
+vt 129.819 -282
+f 2/2/1 1/1/1 4/4/1
+
+usemtl BackColor
+vn -0 -1 0
+f 3/3/2 2/2/2 1/1/2
+
+usemtl FrontColor
+vt -282 0
+vn 1 0 -0
+v 6 60 288
+vt -288 60
+vt -288 0
+f 2/5/3 5/6/3 3/7/3
+
+v 6 12 282
+vt -282 12
+f 5/6/3 2/5/3 6/8/3
+
+usemtl BackColor
+vn -1 -0 0
+f 3/7/4 5/6/4 2/5/4
+
+usemtl FrontColor
+vt 6 60
+vn 0 0 1
+v 0 0 288
+vt 0 0
+vt 6 0
+f 5/9/5 7/10/5 3/11/5
+
+v 0 60 288
+vt 0 60
+f 7/10/5 5/9/5 8/12/5
+
+usemtl BackColor
+vn -0 -0 -1
+f 3/11/6 7/10/6 5/9/6
+
+usemtl FrontColor
+vt 12 0
+f 7/10/5 1/13/5 3/11/5
+
+v 129.819 0 288
+vt 129.819 0
+f 7/10/5 9/14/5 1/13/5
+
+v 183.819 0 288
+vt 183.819 0
+f 7/10/5 10/15/5 9/14/5
+
+v 252 0 288
+vt 252 0
+f 7/10/5 11/16/5 10/15/5
+
+v 288 0 288
+vt 288 0
+f 7/10/5 12/17/5 11/16/5
+
+v 0 -24 288
+vt 0 -24
+f 13/18/5 12/17/5 7/10/5
+
+v 288 -24 288
+vt 288 -24
+f 12/17/5 13/18/5 14/19/5
+
+usemtl BackColor
+f 14/19/6 13/18/6 12/17/6
+
+usemtl FrontColor
+vt 0 -288
+vn 0 -1 -0
+v 288 -24 -576
+vt -288 576
+vt -288 -288
+f 13/20/7 15/21/7 14/22/7
+
+v 0 -24 -576
+vt 0 576
+f 15/21/7 13/20/7 16/23/7
+
+usemtl BackColor
+vn -0 1 0
+f 16/23/8 13/20/8 15/21/8
+
+usemtl FrontColor
+vn -1 0 -0
+v 0 -12 -96
+vt -96 -12
+vt -576 -24
+f 13/19/9 17/24/9 16/25/9
+
+v 0 0 -96
+vt -96 0
+f 13/19/9 18/26/9 17/24/9
+
+f 18/26/9 13/19/9 7/17/9
+
+usemtl BackColor
+vn 1 -0 0
+f 7/17/10 13/19/10 18/26/10
+
+f 7/10/6 12/17/6 13/18/6
+
+f 11/16/6 12/17/6 7/10/6
+
+usemtl FrontColor
+v 288 60 288
+vt 288 60
+f 19/27/5 11/16/5 12/17/5
+
+v 252 60 288
+vt 252 60
+f 11/16/5 19/27/5 20/28/5
+
+usemtl BackColor
+f 12/17/6 11/16/6 19/27/6
+
+f 20/28/6 19/27/6 11/16/6
+
+usemtl FrontColor
+vt 288 -288
+v 252 60 153
+vt 252 -153
+vt 252 -288
+f 19/29/1 21/30/1 20/31/1
+
+v 288 60 153
+vt 288 -153
+f 21/30/1 19/29/1 22/32/1
+
+usemtl BackColor
+f 20/31/2 21/30/2 19/29/2
+
+usemtl FrontColor
+vt 153 60
+f 21/33/9 11/17/9 20/27/9
+
+v 252 0 153
+vt 153 0
+f 11/17/9 21/33/9 23/34/9
+
+usemtl BackColor
+f 20/27/10 11/17/10 21/33/10
+
+f 23/34/10 21/33/10 11/17/10
+
+usemtl FrontColor
+vt -252 60
+vn 0 0 -1
+v 288 0 153
+vt -252 0
+f 21/35/11 24/7/11 23/36/11
+
+f 24/7/11 21/35/11 22/6/11
+
+usemtl BackColor
+vn -0 -0 1
+f 23/36/12 24/7/12 21/35/12
+
+usemtl FrontColor
+v 252 0 135
+vt 252 -135
+f 24/32/1 25/37/1 23/30/1
+
+v 288 0 135
+vt 288 -135
+f 25/37/1 24/32/1 26/38/1
+
+usemtl BackColor
+f 23/30/2 25/37/2 24/32/2
+
+usemtl FrontColor
+v 252 0 -576
+vt 252 576
+f 27/39/1 23/30/1 25/37/1
+
+f 27/39/1 11/31/1 23/30/1
+
+v 183.819 0 -576
+vt 183.819 576
+f 28/40/1 11/31/1 27/39/1
+
+v 183.819 0 -528
+vt 183.819 528
+f 29/41/1 11/31/1 28/40/1
+
+v 183.819 0 -288
+vt 183.819 288
+f 30/42/1 11/31/1 29/41/1
+
+v 183.819 0 -90
+vt 183.819 90
+f 31/43/1 11/31/1 30/42/1
+
+v 183.819 0 -6
+vt 183.819 6
+f 32/44/1 11/31/1 31/43/1
+
+v 183.819 0 -5.06438e-14
+vt 183.819 5.06438e-14
+f 33/45/1 11/31/1 32/44/1
+
+v 183.819 0 135
+vt 183.819 -135
+f 34/46/1 11/31/1 33/45/1
+
+v 183.819 0 141
+vt 183.819 -141
+f 35/47/1 11/31/1 34/46/1
+
+v 183.819 0 282
+vt 183.819 -282
+f 36/48/1 11/31/1 35/47/1
+
+vt 183.819 -288
+f 11/31/1 36/48/1 10/49/1
+
+usemtl BackColor
+f 10/49/2 36/48/2 11/31/2
+
+usemtl FrontColor
+v 183.819 60 288
+f 36/5/3 37/6/3 10/7/3
+
+v 183.819 60 282
+vt -282 60
+f 37/6/3 36/5/3 38/50/3
+
+usemtl BackColor
+f 10/7/4 37/6/4 36/5/4
+
+usemtl FrontColor
+vt 183.819 60
+f 37/51/5 9/14/5 10/15/5
+
+v 129.819 60 288
+vt 129.819 60
+f 9/14/5 37/51/5 39/52/5
+
+usemtl BackColor
+f 10/15/6 9/14/6 37/51/6
+
+f 9/14/6 10/15/6 7/10/6
+
+f 10/15/6 11/16/6 7/10/6
+
+f 1/13/6 9/14/6 7/10/6
+
+usemtl FrontColor
+vt 129.819 -288
+f 4/4/1 1/1/1 9/53/1
+
+usemtl BackColor
+f 4/4/2 1/1/2 2/2/2
+
+f 9/53/2 1/1/2 4/4/2
+
+usemtl FrontColor
+v 129.819 60 282
+vt 282 60
+vt 282 0
+f 9/17/9 40/54/9 4/55/9
+
+f 40/54/9 9/17/9 39/27/9
+
+usemtl BackColor
+f 39/27/10 9/17/10 40/54/10
+
+f 39/52/6 37/51/6 9/14/6
+
+usemtl FrontColor
+f 37/49/1 40/4/1 39/53/1
+
+f 40/4/1 37/49/1 38/48/1
+
+usemtl BackColor
+f 39/53/2 40/4/2 37/49/2
+
+f 38/48/2 37/49/2 40/4/2
+
+f 38/50/4 36/5/4 37/6/4
+
+usemtl FrontColor
+v 183.819 12 282
+f 38/50/3 36/5/3 41/8/3
+
+usemtl BackColor
+f 41/8/4 36/5/4 38/50/4
+
+usemtl FrontColor
+vt -141 0
+f 35/56/3 41/8/3 36/5/3
+
+v 183.819 12 141
+vt -141 12
+f 41/8/3 35/56/3 42/57/3
+
+usemtl BackColor
+f 36/5/4 41/8/4 35/56/4
+
+f 42/57/4 35/56/4 41/8/4
+
+usemtl FrontColor
+vt -135 0
+f 34/58/3 42/57/3 35/56/3
+
+v 183.819 60 141
+vt -141 60
+f 42/57/3 34/58/3 43/59/3
+
+usemtl BackColor
+f 35/56/4 42/57/4 34/58/4
+
+f 43/59/4 34/58/4 42/57/4
+
+usemtl FrontColor
+v 183.819 60 135
+vt -135 60
+f 43/59/3 34/58/3 44/60/3
+
+usemtl BackColor
+f 44/60/4 34/58/4 43/59/4
+
+usemtl FrontColor
+vt -183.819 0
+v 135.819 60 135
+vt -135.819 60
+vt -183.819 60
+f 34/61/11 45/62/11 44/63/11
+
+v 135.819 0 135
+vt -135.819 0
+f 45/62/11 34/61/11 46/64/11
+
+usemtl BackColor
+f 46/64/12 34/61/12 45/62/12
+
+usemtl FrontColor
+v 135.819 0 -6
+vt 135.819 6
+vt 135.819 -135
+f 34/46/1 47/65/1 46/66/1
+
+v 135.819 0 -90
+vt 135.819 90
+f 47/65/1 34/46/1 48/67/1
+
+usemtl BackColor
+f 46/66/2 47/65/2 34/46/2
+
+usemtl FrontColor
+f 47/11/3 45/60/3 46/58/3
+
+v 135.819 60 -6
+f 45/60/3 47/11/3 49/9/3
+
+usemtl BackColor
+f 46/58/4 45/60/4 47/11/4
+
+f 49/9/4 47/11/4 45/60/4
+
+usemtl FrontColor
+vt -135.819 2.83454e-33
+vn -4.48791e-17 -4.72423e-34 -1
+v 66 60 -6
+vt -66 60
+f 47/68/13 50/69/13 49/62/13
+
+v 66 0 -6
+vt -66 2.83454e-33
+f 50/69/13 47/68/13 51/70/13
+
+usemtl BackColor
+vn 4.48791e-17 4.72423e-34 1
+f 51/70/14 47/68/14 50/69/14
+
+usemtl FrontColor
+v 66 0 -90
+vt 66 90
+vt 66 6
+f 47/65/1 52/71/1 51/72/1
+
+f 52/71/1 47/65/1 48/67/1
+
+usemtl BackColor
+f 51/72/2 52/71/2 47/65/2
+
+usemtl FrontColor
+vt 90 0
+f 52/73/3 50/9/3 51/11/3
+
+v 66 60 -90
+vt 90 60
+f 50/9/3 52/73/3 53/74/3
+
+usemtl BackColor
+f 51/11/4 50/9/4 52/73/4
+
+f 53/74/4 52/73/4 50/9/4
+
+usemtl FrontColor
+v 135.819 60 -90
+vt 135.819 60
+vt 66 60
+f 52/9/5 54/75/5 53/76/5
+
+vt 135.819 0
+f 54/75/5 52/9/5 48/77/5
+
+usemtl BackColor
+f 48/77/6 52/9/6 54/75/6
+
+f 48/67/2 47/65/2 52/71/2
+
+f 48/67/2 34/46/2 47/65/2
+
+usemtl FrontColor
+v 135.819 0 -96
+vt 135.819 96
+f 48/67/1 34/46/1 55/78/1
+
+usemtl BackColor
+f 55/78/2 34/46/2 48/67/2
+
+usemtl FrontColor
+v 135.819 0 -288
+vt 135.819 288
+f 55/78/1 34/46/1 56/79/1
+
+usemtl BackColor
+f 56/79/2 34/46/2 55/78/2
+
+usemtl FrontColor
+v 177.819 0 -4.5178e-14
+vt 177.819 4.5178e-14
+f 56/79/1 34/46/1 57/80/1
+
+usemtl BackColor
+f 57/80/2 34/46/2 56/79/2
+
+usemtl FrontColor
+f 57/80/1 34/46/1 33/45/1
+
+usemtl BackColor
+f 33/45/2 34/46/2 57/80/2
+
+f 33/45/2 11/31/2 34/46/2
+
+f 32/44/2 11/31/2 33/45/2
+
+f 31/43/2 11/31/2 32/44/2
+
+f 30/42/2 11/31/2 31/43/2
+
+f 29/41/2 11/31/2 30/42/2
+
+f 28/40/2 11/31/2 29/41/2
+
+f 27/39/2 11/31/2 28/40/2
+
+f 23/30/2 11/31/2 27/39/2
+
+f 25/37/2 23/30/2 27/39/2
+
+usemtl FrontColor
+v 252 0 12
+vt 252 -12
+f 27/39/1 25/37/1 58/81/1
+
+usemtl BackColor
+f 58/81/2 25/37/2 27/39/2
+
+usemtl FrontColor
+vt 135 0
+v 252 60 12
+vt 12 60
+f 25/82/9 59/83/9 58/13/9
+
+v 252 60 135
+vt 135 60
+f 59/83/9 25/82/9 60/84/9
+
+usemtl BackColor
+f 60/84/10 25/82/10 59/83/10
+
+usemtl FrontColor
+v 288 60 135
+f 25/16/5 61/27/5 60/28/5
+
+f 61/27/5 25/16/5 26/17/5
+
+usemtl BackColor
+f 26/17/6 25/16/6 61/27/6
+
+f 26/38/2 24/32/2 25/37/2
+
+usemtl FrontColor
+vt -153 0
+v 288 -24 44
+vt -44 -24
+f 24/85/3 62/86/3 26/58/3
+
+f 12/7/3 62/86/3 24/85/3
+
+vt -288 -24
+f 62/86/3 12/7/3 14/87/3
+
+usemtl BackColor
+f 14/87/4 12/7/4 62/86/4
+
+f 24/85/4 62/86/4 12/7/4
+
+f 26/58/4 62/86/4 24/85/4
+
+usemtl FrontColor
+v 288 0 12
+vt -12 0
+f 26/58/3 62/86/3 63/88/3
+
+usemtl BackColor
+f 63/88/4 62/86/4 26/58/4
+
+usemtl FrontColor
+vt 576 -24
+f 63/88/3 62/86/3 15/89/3
+
+usemtl BackColor
+f 15/89/4 62/86/4 63/88/4
+
+usemtl FrontColor
+vt -288 -44
+f 14/22/7 15/21/7 62/90/7
+
+usemtl BackColor
+f 14/22/8 15/21/8 13/20/8
+
+f 62/90/8 15/21/8 14/22/8
+
+usemtl FrontColor
+v 288 0 -6
+f 63/88/3 15/89/3 64/11/3
+
+usemtl BackColor
+f 64/11/4 15/89/4 63/88/4
+
+usemtl FrontColor
+v 288 0 -78
+vt 78 0
+f 64/11/3 15/89/3 65/91/3
+
+usemtl BackColor
+f 65/91/4 15/89/4 64/11/4
+
+usemtl FrontColor
+v 288 0 -90
+f 65/91/3 15/89/3 66/73/3
+
+usemtl BackColor
+f 66/73/4 15/89/4 65/91/4
+
+usemtl FrontColor
+v 288 0 -288
+f 66/73/3 15/89/3 67/17/3
+
+usemtl BackColor
+f 67/17/4 15/89/4 66/73/4
+
+usemtl FrontColor
+v 288 0 -528
+vt 528 0
+f 67/17/3 15/89/3 68/92/3
+
+usemtl BackColor
+f 68/92/4 15/89/4 67/17/4
+
+usemtl FrontColor
+v 288 0 -576
+vt 576 0
+f 68/92/3 15/89/3 69/93/3
+
+usemtl BackColor
+f 69/93/4 15/89/4 68/92/4
+
+usemtl FrontColor
+v 0 0 -576
+f 15/87/11 70/10/11 69/7/11
+
+f 70/10/11 15/87/11 16/18/11
+
+usemtl BackColor
+f 16/18/12 15/87/12 70/10/12
+
+f 69/7/12 70/10/12 15/87/12
+
+usemtl FrontColor
+f 69/7/11 70/10/11 28/61/11
+
+usemtl BackColor
+f 28/61/12 70/10/12 69/7/12
+
+usemtl FrontColor
+v 0 60 -576
+f 71/12/11 28/61/11 70/10/11
+
+v 183.819 60 -576
+f 28/61/11 71/12/11 72/63/11
+
+usemtl BackColor
+f 70/10/12 28/61/12 71/12/12
+
+usemtl FrontColor
+v 6 0 -528
+vt 6 528
+f 70/23/1 73/94/1 28/40/1
+
+v 6 0 -288
+vt 6 288
+f 70/23/1 74/95/1 73/94/1
+
+v 0 0 -288
+vt 0 288
+f 74/95/1 70/23/1 75/96/1
+
+usemtl BackColor
+f 75/96/2 70/23/2 74/95/2
+
+usemtl FrontColor
+vt -576 60
+vt -576 0
+f 75/7/9 71/97/9 70/98/9
+
+v 0 60 -288
+f 71/97/9 75/7/9 76/6/9
+
+usemtl BackColor
+f 76/6/10 75/7/10 71/97/10
+
+usemtl FrontColor
+v 6 60 -288
+f 75/10/5 77/9/5 76/12/5
+
+f 77/9/5 75/10/5 74/11/5
+
+usemtl BackColor
+f 74/11/6 75/10/6 77/9/6
+
+usemtl FrontColor
+v 0 -12 -288
+vt 0 -12
+f 78/99/5 74/11/5 75/10/5
+
+v 6 -12 -288
+vt 6 -12
+f 74/11/5 78/99/5 79/100/5
+
+usemtl BackColor
+f 79/100/6 78/99/6 74/11/6
+
+usemtl FrontColor
+v 135.819 -12 -96
+f 78/96/1 80/78/1 79/95/1
+
+vt 0 96
+f 80/78/1 78/96/1 17/101/1
+
+usemtl BackColor
+f 17/101/2 78/96/2 80/78/2
+
+usemtl FrontColor
+vt -288 -12
+f 16/25/9 17/24/9 78/102/9
+
+usemtl BackColor
+f 16/25/10 17/24/10 13/19/10
+
+f 78/102/10 17/24/10 16/25/10
+
+usemtl FrontColor
+f 16/25/9 78/102/9 70/98/9
+
+usemtl BackColor
+f 70/98/10 78/102/10 16/25/10
+
+usemtl FrontColor
+f 70/98/9 78/102/9 75/7/9
+
+usemtl BackColor
+f 75/7/10 78/102/10 70/98/10
+
+f 75/10/6 74/11/6 78/99/6
+
+f 70/98/10 71/97/10 75/7/10
+
+f 17/24/10 18/26/10 13/19/10
+
+usemtl FrontColor
+vt -135.819 -12
+f 18/10/11 80/103/11 17/99/11
+
+f 80/103/11 18/10/11 55/64/11
+
+usemtl BackColor
+f 17/99/12 80/103/12 18/10/12
+
+f 55/64/12 18/10/12 80/103/12
+
+usemtl FrontColor
+v 6 0 -96
+vt -6 0
+f 55/64/11 18/10/11 81/104/11
+
+usemtl BackColor
+f 81/104/12 18/10/12 55/64/12
+
+usemtl FrontColor
+v 0 60 -96
+f 82/12/11 81/104/11 18/10/11
+
+v 6 60 -96
+vt -6 60
+f 81/104/11 82/12/11 83/105/11
+
+usemtl BackColor
+f 18/10/12 81/104/12 82/12/12
+
+f 83/105/12 82/12/12 81/104/12
+
+usemtl FrontColor
+vt 6 96
+f 82/101/1 5/3/1 83/106/1
+
+f 5/3/1 82/101/1 8/20/1
+
+usemtl BackColor
+f 8/20/2 82/101/2 5/3/2
+
+usemtl FrontColor
+vt -96 60
+f 82/107/9 7/17/9 8/27/9
+
+f 7/17/9 82/107/9 18/26/9
+
+usemtl BackColor
+f 8/27/10 7/17/10 82/107/10
+
+f 8/12/6 5/9/6 7/10/6
+
+f 18/26/10 82/107/10 7/17/10
+
+f 83/106/2 5/3/2 82/101/2
+
+usemtl FrontColor
+vt 96 60
+f 5/6/3 6/8/3 83/108/3
+
+usemtl BackColor
+f 6/8/4 2/5/4 5/6/4
+
+usemtl FrontColor
+v 129.819 12 282
+vt 129.819 12
+vt 6 12
+f 2/11/5 84/109/5 6/110/5
+
+f 84/109/5 2/11/5 4/14/5
+
+usemtl BackColor
+f 4/14/6 2/11/6 84/109/6
+
+f 6/110/6 84/109/6 2/11/6
+
+usemtl FrontColor
+v 6 12 141
+vt 6 -141
+f 84/4/1 85/111/1 6/2/1
+
+v 129.819 12 141
+vt 129.819 -141
+f 85/111/1 84/4/1 86/112/1
+
+usemtl BackColor
+f 6/2/2 85/111/2 84/4/2
+
+usemtl FrontColor
+f 83/108/3 6/8/3 85/57/3
+
+usemtl BackColor
+f 83/108/4 6/8/4 5/6/4
+
+f 85/57/4 6/8/4 83/108/4
+
+usemtl FrontColor
+v 6 0 141
+f 6/8/3 87/56/3 85/57/3
+
+f 87/56/3 6/8/3 2/5/3
+
+usemtl BackColor
+f 2/5/4 6/8/4 87/56/4
+
+f 85/57/4 87/56/4 6/8/4
+
+usemtl FrontColor
+vt 96 0
+f 81/113/3 85/57/3 87/56/3
+
+f 83/108/3 85/57/3 81/113/3
+
+usemtl BackColor
+f 81/113/4 85/57/4 83/108/4
+
+f 87/56/4 85/57/4 81/113/4
+
+usemtl FrontColor
+vt -6 12
+v 129.819 0 141
+vt -129.819 0
+f 85/114/11 88/115/11 87/104/11
+
+vt -129.819 12
+f 88/115/11 85/114/11 86/116/11
+
+usemtl BackColor
+f 87/104/12 88/115/12 85/114/12
+
+usemtl FrontColor
+v 42 0 -1.81497e-15
+vt 42 1.81497e-15
+f 89/117/1 87/111/1 88/112/1
+
+f 87/111/1 89/117/1 81/106/1
+
+usemtl BackColor
+f 81/106/2 89/117/2 87/111/2
+
+usemtl FrontColor
+v 42 0 -96
+vt 42 96
+f 90/118/1 81/106/1 89/117/1
+
+usemtl BackColor
+f 89/117/2 81/106/2 90/118/2
+
+usemtl FrontColor
+vt -42 0
+f 55/64/11 81/104/11 90/119/11
+
+usemtl BackColor
+f 90/119/12 81/104/12 55/64/12
+
+usemtl FrontColor
+v 42 60 -96
+vt -42 60
+f 55/64/11 90/119/11 91/120/11
+
+usemtl BackColor
+f 91/120/12 90/119/12 55/64/12
+
+usemtl FrontColor
+vt -1.81497e-15 0
+f 89/121/9 91/107/9 90/26/9
+
+v 42 60 -1.81497e-15
+vt -1.81497e-15 60
+f 91/107/9 89/121/9 92/122/9
+
+usemtl BackColor
+f 92/122/10 89/121/10 91/107/10
+
+usemtl FrontColor
+vt 42 5.40725e-49
+vn 5.19283e-17 -1.47732e-33 1
+v 129.819 60 -6.37528e-15
+vt 42 60
+f 89/123/15 93/52/15 92/124/15
+
+v 129.819 0 -6.37528e-15
+vt 129.819 5.40725e-49
+f 93/52/15 89/123/15 94/125/15
+
+usemtl BackColor
+vn -5.19283e-17 1.47732e-33 -1
+f 94/125/16 89/123/16 93/52/16
+
+usemtl FrontColor
+vt 129.819 6.37528e-15
+f 89/117/1 88/112/1 94/126/1
+
+usemtl BackColor
+f 88/112/2 87/111/2 89/117/2
+
+f 94/126/2 88/112/2 89/117/2
+
+usemtl FrontColor
+vt 141 0
+vt -6.37528e-15 60
+vt -6.37528e-15 0
+f 88/127/9 93/128/9 94/129/9
+
+vt 141 12
+f 86/130/9 93/128/9 88/127/9
+
+v 129.819 60 141
+vt 141 60
+f 93/128/9 86/130/9 95/131/9
+
+usemtl BackColor
+f 95/131/10 86/130/10 93/128/10
+
+usemtl FrontColor
+f 86/109/5 43/51/5 95/52/5
+
+vt 183.819 12
+f 43/51/5 86/109/5 42/132/5
+
+usemtl BackColor
+f 42/132/6 86/109/6 43/51/6
+
+usemtl FrontColor
+f 86/112/1 41/48/1 42/47/1
+
+f 86/112/1 84/4/1 41/48/1
+
+usemtl BackColor
+f 86/112/2 84/4/2 85/111/2
+
+f 41/48/2 84/4/2 86/112/2
+
+usemtl FrontColor
+vt -129.819 60
+vt -183.819 12
+f 40/133/11 41/134/11 84/116/11
+
+f 41/134/11 40/133/11 38/63/11
+
+usemtl BackColor
+f 84/116/12 41/134/12 40/133/12
+
+f 38/63/12 40/133/12 41/134/12
+
+usemtl FrontColor
+vt 282 12
+f 4/55/9 40/54/9 84/135/9
+
+usemtl BackColor
+f 4/55/10 40/54/10 9/17/10
+
+f 84/135/10 40/54/10 4/55/10
+
+f 42/47/2 41/48/2 86/112/2
+
+f 86/116/12 85/114/12 88/115/12
+
+f 88/127/10 93/128/10 86/130/10
+
+f 94/129/10 93/128/10 88/127/10
+
+f 95/52/6 43/51/6 86/109/6
+
+usemtl FrontColor
+f 45/66/1 95/112/1 43/47/1
+
+f 95/112/1 45/66/1 93/126/1
+
+usemtl BackColor
+f 93/126/2 45/66/2 95/112/2
+
+usemtl FrontColor
+f 49/65/1 93/126/1 45/66/1
+
+f 50/72/1 93/126/1 49/65/1
+
+f 50/72/1 92/117/1 93/126/1
+
+f 92/117/1 50/72/1 91/118/1
+
+usemtl BackColor
+f 91/118/2 50/72/2 92/117/2
+
+usemtl FrontColor
+f 53/71/1 91/118/1 50/72/1
+
+v 135.819 60 -96
+f 91/118/1 53/71/1 96/78/1
+
+usemtl BackColor
+f 96/78/2 53/71/2 91/118/2
+
+usemtl FrontColor
+f 96/78/1 53/71/1 54/67/1
+
+usemtl BackColor
+f 54/67/2 53/71/2 96/78/2
+
+f 53/76/6 54/75/6 52/9/6
+
+usemtl FrontColor
+f 54/74/3 55/113/3 96/108/3
+
+f 55/113/3 54/74/3 48/73/3
+
+usemtl BackColor
+f 48/73/4 54/74/4 55/113/4
+
+f 96/108/4 55/113/4 54/74/4
+
+usemtl FrontColor
+f 55/64/11 91/120/11 96/62/11
+
+usemtl BackColor
+f 96/62/12 91/120/12 55/64/12
+
+f 50/72/2 91/118/2 53/71/2
+
+f 93/126/2 92/117/2 50/72/2
+
+f 92/124/16 93/52/16 89/123/16
+
+f 49/65/2 93/126/2 50/72/2
+
+f 45/66/2 93/126/2 49/65/2
+
+f 49/62/14 50/69/14 47/68/14
+
+f 43/47/2 95/112/2 45/66/2
+
+usemtl FrontColor
+f 45/66/1 43/47/1 44/46/1
+
+usemtl BackColor
+f 44/46/2 43/47/2 45/66/2
+
+f 44/63/12 45/62/12 34/61/12
+
+f 90/26/10 91/107/10 89/121/10
+
+usemtl FrontColor
+f 56/7/9 80/24/9 55/26/9
+
+v 135.819 -12 -288
+f 80/24/9 56/7/9 97/102/9
+
+usemtl BackColor
+f 55/26/10 80/24/10 56/7/10
+
+f 97/102/10 56/7/10 80/24/10
+
+usemtl FrontColor
+vt 135.819 -12
+f 56/77/5 79/100/5 97/136/5
+
+f 79/100/5 56/77/5 74/11/5
+
+usemtl BackColor
+f 97/136/6 79/100/6 56/77/6
+
+usemtl FrontColor
+f 79/95/1 80/78/1 97/79/1
+
+usemtl BackColor
+f 79/95/2 80/78/2 78/96/2
+
+f 97/79/2 80/78/2 79/95/2
+
+f 74/11/6 56/77/6 79/100/6
+
+usemtl FrontColor
+f 56/79/1 73/94/1 74/95/1
+
+f 73/94/1 56/79/1 29/41/1
+
+usemtl BackColor
+f 74/95/2 73/94/2 56/79/2
+
+usemtl FrontColor
+f 73/92/3 77/27/3 74/17/3
+
+v 6 60 -528
+vt 528 60
+f 77/27/3 73/92/3 98/137/3
+
+usemtl BackColor
+f 74/17/4 77/27/4 73/92/4
+
+f 98/137/4 73/92/4 77/27/4
+
+usemtl FrontColor
+v 183.819 60 -528
+f 73/11/5 99/51/5 98/9/5
+
+f 99/51/5 73/11/5 29/15/5
+
+usemtl BackColor
+f 29/15/6 73/11/6 99/51/6
+
+usemtl FrontColor
+f 28/40/1 73/94/1 29/41/1
+
+usemtl BackColor
+f 28/40/2 73/94/2 70/23/2
+
+f 29/41/2 73/94/2 28/40/2
+
+f 29/41/2 56/79/2 73/94/2
+
+usemtl FrontColor
+v 177.819 0 -288
+vt 177.819 288
+f 29/41/1 56/79/1 100/138/1
+
+usemtl BackColor
+f 100/138/2 56/79/2 29/41/2
+
+usemtl FrontColor
+f 100/138/1 56/79/1 57/80/1
+
+usemtl BackColor
+f 57/80/2 56/79/2 100/138/2
+
+usemtl FrontColor
+v 177.819 0 -6
+vt 177.819 6
+f 100/138/1 57/80/1 101/139/1
+
+usemtl BackColor
+f 101/139/2 57/80/2 100/138/2
+
+usemtl FrontColor
+vt -4.5178e-14 0
+v 177.819 60 -6
+f 57/140/9 102/105/9 101/104/9
+
+v 177.819 60 -4.5178e-14
+vt -4.5178e-14 60
+f 102/105/9 57/140/9 103/141/9
+
+usemtl BackColor
+f 103/141/10 57/140/10 102/105/10
+
+usemtl FrontColor
+vt 177.819 0
+vn 9.10974e-16 0 1
+v 183.819 60 -5.06438e-14
+vt 177.819 60
+f 57/142/17 104/51/17 103/143/17
+
+f 104/51/17 57/142/17 33/15/17
+
+usemtl BackColor
+vn -9.10974e-16 -0 -1
+f 33/15/18 57/142/18 104/51/18
+
+f 103/143/18 104/51/18 57/142/18
+
+usemtl FrontColor
+f 104/45/1 102/139/1 103/80/1
+
+v 183.819 60 -6
+f 102/139/1 104/45/1 105/44/1
+
+usemtl BackColor
+f 103/80/2 102/139/2 104/45/2
+
+f 105/44/2 104/45/2 102/139/2
+
+usemtl FrontColor
+vt 5.06438e-14 60
+f 104/144/3 32/11/3 105/9/3
+
+vt 5.06438e-14 0
+f 32/11/3 104/144/3 33/145/3
+
+usemtl BackColor
+f 33/145/4 104/144/4 32/11/4
+
+f 105/9/4 32/11/4 104/144/4
+
+usemtl FrontColor
+vt -177.819 60
+f 32/61/11 102/146/11 105/63/11
+
+vt -177.819 0
+f 102/146/11 32/61/11 101/147/11
+
+usemtl BackColor
+f 101/147/12 32/61/12 102/146/12
+
+usemtl FrontColor
+v 177.819 0 -90
+vt 177.819 90
+f 32/44/1 106/148/1 101/139/1
+
+f 106/148/1 32/44/1 31/43/1
+
+usemtl BackColor
+f 101/139/2 106/148/2 32/44/2
+
+usemtl FrontColor
+f 100/138/1 101/139/1 106/148/1
+
+usemtl BackColor
+f 106/148/2 101/139/2 100/138/2
+
+usemtl FrontColor
+vt -90 0
+v 177.819 60 -288
+f 106/149/9 107/6/9 100/7/9
+
+v 177.819 60 -90
+vt -90 60
+f 107/6/9 106/149/9 108/150/9
+
+usemtl BackColor
+f 108/150/10 106/149/10 107/6/10
+
+usemtl FrontColor
+v 183.819 60 -90
+f 106/142/5 109/51/5 108/143/5
+
+f 109/51/5 106/142/5 31/15/5
+
+usemtl BackColor
+f 31/15/6 106/142/6 109/51/6
+
+usemtl FrontColor
+f 31/43/1 100/138/1 106/148/1
+
+f 100/138/1 31/43/1 30/42/1
+
+usemtl BackColor
+f 106/148/2 100/138/2 31/43/2
+
+f 100/7/10 107/6/10 106/149/10
+
+usemtl FrontColor
+f 107/146/11 30/61/11 100/147/11
+
+v 183.819 60 -288
+f 30/61/11 107/146/11 110/63/11
+
+usemtl BackColor
+f 100/147/12 30/61/12 107/146/12
+
+f 30/42/2 31/43/2 100/138/2
+
+usemtl FrontColor
+f 30/17/3 109/74/3 31/73/3
+
+f 109/74/3 30/17/3 110/27/3
+
+usemtl BackColor
+f 31/73/4 109/74/4 30/17/4
+
+f 110/27/4 30/17/4 109/74/4
+
+f 110/63/12 107/146/12 30/61/12
+
+usemtl FrontColor
+f 107/138/1 109/43/1 110/42/1
+
+f 109/43/1 107/138/1 108/148/1
+
+usemtl BackColor
+f 108/148/2 107/138/2 109/43/2
+
+f 110/42/2 109/43/2 107/138/2
+
+f 108/143/6 109/51/6 106/142/6
+
+usemtl FrontColor
+f 29/41/1 100/138/1 30/42/1
+
+usemtl BackColor
+f 30/42/2 100/138/2 29/41/2
+
+f 31/43/2 32/44/2 106/148/2
+
+f 105/63/12 102/146/12 32/61/12
+
+f 101/104/10 102/105/10 57/140/10
+
+usemtl FrontColor
+f 28/93/3 99/137/3 29/92/3
+
+vt 576 60
+f 99/137/3 28/93/3 72/151/3
+
+usemtl BackColor
+f 29/92/4 99/137/4 28/93/4
+
+f 72/151/4 28/93/4 99/137/4
+
+f 72/63/12 71/12/12 28/61/12
+
+usemtl FrontColor
+f 71/23/1 98/94/1 72/40/1
+
+f 71/23/1 77/95/1 98/94/1
+
+f 77/95/1 71/23/1 76/96/1
+
+usemtl BackColor
+f 76/96/2 71/23/2 77/95/2
+
+f 98/94/2 77/95/2 71/23/2
+
+f 72/40/2 98/94/2 71/23/2
+
+usemtl FrontColor
+f 72/40/1 98/94/1 99/41/1
+
+usemtl BackColor
+f 99/41/2 98/94/2 72/40/2
+
+f 98/9/6 99/51/6 73/11/6
+
+f 76/12/6 77/9/6 75/10/6
+
+f 73/94/2 74/95/2 70/23/2
+
+usemtl FrontColor
+f 69/7/11 28/61/11 27/36/11
+
+usemtl BackColor
+f 27/36/12 28/61/12 69/7/12
+
+usemtl FrontColor
+v 252 60 -576
+f 111/35/11 69/7/11 27/36/11
+
+v 288 60 -576
+f 69/7/11 111/35/11 112/6/11
+
+usemtl BackColor
+f 27/36/12 69/7/12 111/35/12
+
+f 112/6/12 111/35/12 69/7/12
+
+usemtl FrontColor
+v 288 60 -528
+vt 288 528
+vt 288 576
+f 111/39/1 113/152/1 112/153/1
+
+v 252 60 -528
+vt 252 528
+f 113/152/1 111/39/1 114/154/1
+
+usemtl BackColor
+f 114/154/2 111/39/2 113/152/2
+
+usemtl FrontColor
+v 252 0 -528
+vt -528 0
+vt -528 60
+f 111/97/9 115/155/9 114/156/9
+
+f 115/155/9 111/97/9 27/98/9
+
+usemtl BackColor
+f 114/156/10 115/155/10 111/97/10
+
+usemtl FrontColor
+f 115/16/5 113/27/5 114/28/5
+
+f 113/27/5 115/16/5 68/17/5
+
+usemtl BackColor
+f 68/17/6 115/16/6 113/27/6
+
+usemtl FrontColor
+vt 288 288
+f 115/154/1 67/157/1 68/152/1
+
+v 252 0 -288
+vt 252 288
+f 67/157/1 115/154/1 116/158/1
+
+usemtl BackColor
+f 116/158/2 115/154/2 67/157/2
+
+usemtl FrontColor
+f 27/39/1 116/158/1 115/154/1
+
+v 252 0 -90
+vt 252 90
+f 27/39/1 117/159/1 116/158/1
+
+v 252 0 -78
+vt 252 78
+f 27/39/1 118/160/1 117/159/1
+
+v 252 0 -6
+vt 252 6
+f 27/39/1 119/161/1 118/160/1
+
+f 27/39/1 58/81/1 119/161/1
+
+usemtl BackColor
+f 119/161/2 58/81/2 27/39/2
+
+usemtl FrontColor
+vt 288 -12
+f 63/162/1 119/161/1 58/81/1
+
+vt 288 6
+f 119/161/1 63/162/1 64/163/1
+
+usemtl BackColor
+f 58/81/2 119/161/2 63/162/2
+
+f 64/163/2 63/162/2 119/161/2
+
+usemtl FrontColor
+v 288 60 -6
+vn 3.45403e-16 0 1
+f 120/27/19 119/16/19 64/17/19
+
+v 252 60 -6
+f 119/16/19 120/27/19 121/28/19
+
+usemtl BackColor
+vn -3.45403e-16 -0 -1
+f 64/17/20 119/16/20 120/27/20
+
+f 121/28/20 120/27/20 119/16/20
+
+usemtl FrontColor
+v 252 60 -78
+f 120/163/1 122/160/1 121/161/1
+
+v 288 60 -78
+vt 288 78
+f 122/160/1 120/163/1 123/164/1
+
+usemtl BackColor
+f 121/161/2 122/160/2 120/163/2
+
+usemtl FrontColor
+vt -78 60
+f 122/165/9 119/104/9 121/105/9
+
+vt -78 0
+f 119/104/9 122/165/9 118/166/9
+
+usemtl BackColor
+f 121/105/10 119/104/10 122/165/10
+
+f 118/166/10 122/165/10 119/104/10
+
+usemtl FrontColor
+f 122/35/11 65/7/11 118/36/11
+
+f 65/7/11 122/35/11 123/6/11
+
+usemtl BackColor
+f 118/36/12 65/7/12 122/35/12
+
+usemtl FrontColor
+f 65/164/1 117/159/1 118/160/1
+
+vt 288 90
+f 117/159/1 65/164/1 66/167/1
+
+usemtl BackColor
+f 118/160/2 117/159/2 65/164/2
+
+f 117/159/2 118/160/2 27/39/2
+
+f 118/160/2 119/161/2 27/39/2
+
+f 116/158/2 117/159/2 27/39/2
+
+usemtl FrontColor
+f 66/167/1 116/158/1 117/159/1
+
+f 116/158/1 66/167/1 67/157/1
+
+usemtl BackColor
+f 117/159/2 116/158/2 66/167/2
+
+usemtl FrontColor
+v 252 60 -288
+f 117/149/9 124/6/9 116/7/9
+
+v 252 60 -90
+f 124/6/9 117/149/9 125/150/9
+
+usemtl BackColor
+f 125/150/10 117/149/10 124/6/10
+
+usemtl FrontColor
+v 288 60 -90
+f 117/16/5 126/27/5 125/28/5
+
+f 126/27/5 117/16/5 66/17/5
+
+usemtl BackColor
+f 66/17/6 117/16/6 126/27/6
+
+f 66/167/2 65/164/2 117/159/2
+
+f 125/28/6 126/27/6 117/16/6
+
+usemtl FrontColor
+f 126/167/1 124/158/1 125/159/1
+
+v 288 60 -288
+f 124/158/1 126/167/1 127/157/1
+
+usemtl BackColor
+f 125/159/2 124/158/2 126/167/2
+
+f 127/157/2 126/167/2 124/158/2
+
+usemtl FrontColor
+f 126/74/3 67/17/3 127/27/3
+
+f 67/17/3 126/74/3 66/73/3
+
+usemtl BackColor
+f 66/73/4 126/74/4 67/17/4
+
+f 127/27/4 67/17/4 126/74/4
+
+usemtl FrontColor
+f 67/7/11 124/35/11 127/6/11
+
+f 124/35/11 67/7/11 116/36/11
+
+usemtl BackColor
+f 116/36/12 67/7/12 124/35/12
+
+f 67/157/2 66/167/2 116/158/2
+
+f 127/6/12 124/35/12 67/7/12
+
+f 116/7/10 124/6/10 117/149/10
+
+f 115/154/2 116/158/2 27/39/2
+
+f 27/98/10 111/97/10 115/155/10
+
+f 123/6/12 122/35/12 65/7/12
+
+f 123/164/2 120/163/2 122/160/2
+
+usemtl FrontColor
+vt 78 60
+f 120/9/3 65/91/3 123/168/3
+
+f 65/91/3 120/9/3 64/11/3
+
+usemtl BackColor
+f 64/11/4 120/9/4 65/91/4
+
+f 123/168/4 65/91/4 120/9/4
+
+usemtl FrontColor
+vn 9.86865e-17 0 -1
+f 59/35/21 63/7/21 58/36/21
+
+v 288 60 12
+f 63/7/21 59/35/21 128/6/21
+
+usemtl BackColor
+vn -9.86865e-17 -0 1
+f 58/36/22 63/7/22 59/35/22
+
+f 128/6/22 59/35/22 63/7/22
+
+usemtl FrontColor
+f 59/81/1 61/38/1 128/162/1
+
+f 61/38/1 59/81/1 60/37/1
+
+usemtl BackColor
+f 60/37/2 59/81/2 61/38/2
+
+f 128/162/2 61/38/2 59/81/2
+
+usemtl FrontColor
+vt -12 60
+f 61/60/3 63/88/3 128/169/3
+
+f 63/88/3 61/60/3 26/58/3
+
+usemtl BackColor
+f 26/58/4 61/60/4 63/88/4
+
+f 128/169/4 63/88/4 61/60/4
+
+f 60/28/6 61/27/6 25/16/6
+
+f 58/13/10 59/83/10 25/82/10
+
+f 68/152/2 67/157/2 115/154/2
+
+f 114/28/6 113/27/6 115/16/6
+
+usemtl FrontColor
+f 69/93/3 113/137/3 68/92/3
+
+f 113/137/3 69/93/3 112/151/3
+
+usemtl BackColor
+f 68/92/4 113/137/4 69/93/4
+
+f 112/151/4 69/93/4 113/137/4
+
+f 112/153/2 113/152/2 111/39/2
+
+usemtl FrontColor
+f 24/85/3 19/6/3 12/7/3
+
+vt -153 60
+f 19/6/3 24/85/3 22/170/3
+
+usemtl BackColor
+f 12/7/4 19/6/4 24/85/4
+
+f 22/170/4 24/85/4 19/6/4
+
+f 22/6/12 21/35/12 24/7/12
+
+f 22/32/2 19/29/2 21/30/2
+
+f 34/46/2 11/31/2 35/47/2
+
+f 35/47/2 11/31/2 36/48/2
+
+f 3/11/6 1/13/6 7/10/6
+
+g Mesh2 Model
+
+l 12 24
+
+l 11 12
+
+l 11 23
+
+l 10 11
+
+l 36 10
+
+l 36 35
+
+l 36 41
+
+l 84 41
+
+l 6 84
+
+l 6 85
+
+l 2 6
+
+l 2 87
+
+l 3 2
+
+l 3 5
+
+l 3 1
+
+l 7 3
+
+l 7 18
+
+l 7 8
+
+l 7 13
+
+l 14 13
+
+l 12 14
+
+l 12 19
+
+l 20 19
+
+l 20 21
+
+l 11 20
+
+l 21 22
+
+l 23 21
+
+l 23 24
+
+l 24 26
+
+l 24 22
+
+l 19 22
+
+l 26 63
+
+l 25 26
+
+l 25 58
+
+l 25 60
+
+l 60 59
+
+l 60 61
+
+l 61 128
+
+l 26 61
+
+l 59 128
+
+l 58 59
+
+l 58 63
+
+l 64 63
+
+l 119 64
+
+l 119 118
+
+l 119 121
+
+l 121 120
+
+l 121 122
+
+l 122 123
+
+l 118 122
+
+l 118 65
+
+l 66 65
+
+l 67 66
+
+l 67 68
+
+l 67 127
+
+l 116 67
+
+l 117 116
+
+l 117 66
+
+l 117 125
+
+l 125 124
+
+l 125 126
+
+l 127 126
+
+l 124 127
+
+l 124 116
+
+l 66 126
+
+l 68 115
+
+l 68 69
+
+l 68 113
+
+l 113 114
+
+l 113 112
+
+l 111 112
+
+l 114 111
+
+l 115 114
+
+l 115 27
+
+l 28 27
+
+l 28 70
+
+l 29 28
+
+l 29 73
+
+l 29 99
+
+l 30 29
+
+l 100 30
+
+l 106 100
+
+l 31 106
+
+l 31 30
+
+l 31 109
+
+l 109 110
+
+l 109 108
+
+l 108 107
+
+l 106 108
+
+l 107 110
+
+l 100 107
+
+l 110 30
+
+l 99 98
+
+l 99 72
+
+l 72 71
+
+l 28 72
+
+l 76 71
+
+l 75 76
+
+l 75 70
+
+l 75 74
+
+l 75 78
+
+l 78 79
+
+l 17 78
+
+l 80 17
+
+l 80 97
+
+l 55 80
+
+l 55 56
+
+l 48 55
+
+l 48 52
+
+l 48 54
+
+l 54 53
+
+l 54 96
+
+l 96 91
+
+l 55 96
+
+l 91 92
+
+l 90 91
+
+l 90 89
+
+l 90 81
+
+l 87 81
+
+l 88 87
+
+l 88 94
+
+l 88 86
+
+l 86 42
+
+l 86 85
+
+l 86 95
+
+l 95 93
+
+l 95 43
+
+l 43 44
+
+l 42 43
+
+l 41 42
+
+l 41 38
+
+l 40 38
+
+l 39 40
+
+l 39 37
+
+l 9 39
+
+l 9 4
+
+l 9 10
+
+l 1 9
+
+l 10 37
+
+l 38 37
+
+l 2 4
+
+l 4 84
+
+l 84 40
+
+l 35 42
+
+l 35 34
+
+l 46 34
+
+l 46 47
+
+v 135.819 0 141
+l 129 46
+
+l 46 45
+
+l 45 49
+
+l 45 44
+
+l 34 44
+
+l 49 50
+
+l 47 49
+
+l 47 51
+
+l 52 51
+
+l 52 53
+
+l 53 50
+
+l 51 50
+
+l 93 92
+
+l 94 93
+
+l 94 89
+
+l 89 92
+
+l 87 85
+
+l 81 83
+
+l 5 83
+
+l 8 5
+
+l 82 8
+
+l 83 82
+
+l 82 18
+
+l 18 17
+
+l 74 56
+
+l 74 73
+
+l 74 77
+
+l 74 79
+
+l 79 97
+
+l 56 97
+
+l 77 98
+
+l 77 76
+
+l 73 98
+
+l 70 71
+
+l 70 16
+
+l 13 16
+
+l 16 15
+
+l 69 15
+
+l 27 69
+
+l 27 111
+
+l 69 112
+
+l 62 15
+
+l 14 62
+
+l 65 64
+
+l 65 123
+
+l 123 120
+
+l 64 120
+
+l 63 128
+
+g Mesh3 Model
+
+l 57 33
+
+l 57 101
+
+l 57 103
+
+l 103 102
+
+l 103 104
+
+l 104 105
+
+l 33 104
+
+l 33 32
+
+l 101 32
+
+l 101 102
+
+l 102 105
+
+l 32 105
+
+
+</script>
+<script>
+(function(){
+  // ---------- the morph ----------
+  var Zp=200, D=0, flip=false;
+  function centers(){ var s=flip?-1:1; return { x: Zp - s*D/2, y: Zp + s*D/2 }; }
+  function proj(v){ var c=centers();
+    return [ v[0]*(-c.x)/(v[2]-c.x), v[1]*(-c.y)/(v[2]-c.y) ]; }
+
+  // ---------- scenes (quads with a face tag; grids as line lists) ----------
+  function box(x0,x1,y0,y1,z0,z1,Q){                       // exterior faces of a block, viewer at z<0 side
+    Q.push({v:[[x0,y0,z0],[x1,y0,z0],[x1,y1,z0],[x0,y1,z0]],f:'front',n:[0,0,-1],solid:1});
+    Q.push({v:[[x0,y0,z1],[x1,y0,z1],[x1,y1,z1],[x0,y1,z1]],f:'back', n:[0,0, 1],solid:1});
+    Q.push({v:[[x0,y1,z0],[x1,y1,z0],[x1,y1,z1],[x0,y1,z1]],f:'top', n:[0, 1,0],solid:1});
+    Q.push({v:[[x0,y0,z0],[x1,y0,z0],[x1,y0,z1],[x0,y0,z1]],f:'bot', n:[0,-1,0],solid:1});
+    Q.push({v:[[x0,y0,z0],[x0,y1,z0],[x0,y1,z1],[x0,y0,z1]],f:'side',n:[-1,0,0],solid:1});
+    Q.push({v:[[x1,y0,z0],[x1,y1,z0],[x1,y1,z1],[x1,y0,z1]],f:'side',n:[ 1,0,0],solid:1});
+  }
+  function gridOnPlane(G, kind, a0,a1,b0,b1, step, mk){    // mk(a,b) -> world point
+    for(var a=a0;a<=a1+1e-6;a+=step) G.push([mk(a,b0),mk(a,b1)]);
+    for(var b=b0;b<=b1+1e-6;b+=step) G.push([mk(a0,b),mk(a1,b)]);
+  }
+  function sceneColonnade(){
+    var Q=[],G=[];
+    var yb=-200, yTop=-80;                                  // floor level; pier tops (below the eye at 0 → tops visible)
+    // back wall (solid background) + grid
+    Q.push({v:[[-260,yb,510],[260,yb,510],[260,-20,510],[-260,-20,510]],f:'wall'});
+    gridOnPlane(G,'w',-260,260,yb,-20,40,function(a,b){return[a,b,509];});
+    // floor + grid
+    Q.push({v:[[-260,yb,392],[260,yb,392],[260,yb,510],[-260,yb,510]],f:'floor'});
+    gridOnPlane(G,'f',-260,260,392,510,40,function(a,b){return[a,yb,b];});
+    // stylobate (the platform the piers stand on) — its top reads as a plane
+    box(-250,250, yb, yb+16, 402, 486, Q);
+    // five solid piers: chunky, real depth, standing free so each shows front + top + inner side
+    for(var i=-2;i<=2;i++) box(i*104-24, i*104+24, yb+16, yTop, 410, 470, Q);
+    // a set-back architrave, resting across the tops but shy of the front so the pier tops still show
+    box(-250,250, yTop, yTop+24, 448, 470, Q);
+    return {Q:Q,G:G, halfW:250, Zf:410, Zg:440, gaugeY:-135, hh:yTop, Zback:510, name:'colonnade'};
+  }
+  function sceneRoom(){
+    var Q=[],G=[];
+    Q.push({v:[[-200,-120,560],[200,-120,560],[200,120,560],[-200,120,560]],f:'wall'});
+    gridOnPlane(G,'w',-200,200,-120,120,40,function(a,b){return[a,b,559];});
+    Q.push({v:[[-200,-120,392],[200,-120,392],[200,-120,560],[-200,-120,560]],f:'floor'});
+    gridOnPlane(G,'f',-200,200,392,560,42,function(a,b){return[a,-120,b];});
+    Q.push({v:[[-200,120,392],[200,120,392],[200,120,560],[-200,120,560]],f:'top'});
+    gridOnPlane(G,'c',-200,200,392,560,42,function(a,b){return[a,120,b];});
+    Q.push({v:[[-200,-120,392],[-200,120,392],[-200,120,560],[-200,-120,560]],f:'side'});
+    gridOnPlane(G,'l',-120,120,392,560,42,function(a,b){return[-200,a,b];});
+    Q.push({v:[[200,-120,392],[200,120,392],[200,120,560],[200,-120,560]],f:'side'});
+    gridOnPlane(G,'r',-120,120,392,560,42,function(a,b){return[200,a,b];});
+    return {Q:Q,G:G, halfW:200, Zf:392, Zg:470, gaugeY:0, hh:120, Zback:560, name:'room'};
+  }
+  function sceneSite(){
+    var Q=[],G=[];
+    Q.push({v:[[-250,-160,560],[250,-160,560],[250,160,560],[-250,160,560]],f:'wall'});
+    gridOnPlane(G,'g',-250,250,-160,160,36,function(a,b){return[a,b,559];});
+    var blocks=[[-210,-120,60,70,70],[-90,-118,70,54,44],[60,-125,80,62,88],[185,-120,58,58,58],
+                [-190,15,66,88,52],[-40,10,96,70,96],[120,20,72,60,64],[215,25,44,88,80],
+                [-150,118,54,40,40],[30,120,88,44,72],[170,122,52,42,52]];
+    blocks.forEach(function(b){ box(b[0]-b[2]/2,b[0]+b[2]/2, b[1]-b[3]/2,b[1]+b[3]/2, 560-b[4], 560, Q); });
+    return {Q:Q,G:G, halfW:250, Zf:464, Zg:512, gaugeY:0, hh:160, Zback:560, name:'site'};
+  }
+  function sceneCorridor(){
+    var Q=[],G=[];
+    Q.push({v:[[-90,-90,920],[90,-90,920],[90,90,920],[-90,90,920]],f:'wall'});
+    Q.push({v:[[-90,-90,392],[90,-90,392],[90,-90,920],[-90,-90,920]],f:'floor'});
+    gridOnPlane(G,'f',-90,90,392,920,44,function(a,b){return[a,-90,b];});
+    Q.push({v:[[-90,90,392],[90,90,392],[90,90,920],[-90,90,920]],f:'top'});
+    Q.push({v:[[-90,-90,392],[-90,90,392],[-90,90,920],[-90,-90,920]],f:'side'});
+    gridOnPlane(G,'l',-90,90,392,920,44,function(a,b){return[-90,a,b];});
+    Q.push({v:[[90,-90,392],[90,90,392],[90,90,920],[90,-90,920]],f:'side'});
+    gridOnPlane(G,'r',-90,90,392,920,44,function(a,b){return[90,a,b];});
+    for(var z=470;z<=890;z+=140){ box(-90,-74,-90,90,z,z+16,Q); box(74,90,-90,90,z,z+16,Q); }
+    return {Q:Q,G:G, halfW:90, Zf:392, Zg:520, gaugeY:0, hh:90, Zback:920, name:'corridor'};
+  }
+  var SCENES={col:sceneColonnade(), room:sceneRoom(), site:sceneSite(), corr:sceneCorridor()};
+
+  // ---------- house plan (embedded OBJ, baked bird's-eye) ----------
+  function parseHouse(text){
+    var V=[],F=[],E=[],seen={};
+    function edge(a,b){ var k=a<b?a+'_'+b:b+'_'+a; if(!seen[k]){seen[k]=1;E.push([a,b]);} }
+    text.split(/\r?\n/).forEach(function(line){ var t=line.trim().split(/\s+/);
+      if(t[0]==='v') V.push([+t[1],+t[2],+t[3]]);
+      else if(t[0]==='f'){ var ids=t.slice(1).map(function(s){return parseInt(s.split('/')[0])-1;});
+        F.push(ids); for(var j=0;j<ids.length;j++) edge(ids[j],ids[(j+1)%ids.length]); }
+      else if(t[0]==='l'){ for(var i=1;i<t.length-1;i++) edge(parseInt(t[i])-1,parseInt(t[i+1])-1); }
+    });
+    return {V:V,F:F,E:E};
+  }
+  var HOUSE=parseHouse(document.getElementById('houseobj').textContent);
+  var houseOrient=0;
+  function buildHouse(orient){
+    var V=HOUSE.V, xs=V.map(function(p){return p[0];}), ys=V.map(function(p){return p[1];}), zs=V.map(function(p){return p[2];});
+    var cx=(Math.min.apply(0,xs)+Math.max.apply(0,xs))/2, cyH=(Math.min.apply(0,ys)+Math.max.apply(0,ys))/2, cz=(Math.min.apply(0,zs)+Math.max.apply(0,zs))/2;
+    var fspan=Math.max(Math.max.apply(0,xs)-Math.min.apply(0,xs), Math.max.apply(0,zs)-Math.min.apply(0,zs));
+    var hy=(Math.max.apply(0,ys)-Math.min.apply(0,ys))||1;
+    var Z0=470, fitS=320/fspan, sd=90/hy, r=orient&3;
+    function bake(p){
+      var a=(p[0]-cx)*fitS, b=(p[2]-cz)*fitS, h=(cyH-p[1])*sd;   // wall TOPS come nearer (looking down)
+      var X,Y; if(r===0){X=a;Y=b;} else if(r===1){X=b;Y=-a;} else if(r===2){X=-a;Y=-b;} else {X=-b;Y=a;}
+      return [X, Y, Z0+h];
+    }
+    var W=V.map(bake);
+    var L=[-0.32,0.42,-0.85], LL=Math.hypot(L[0],L[1],L[2]); L=[L[0]/LL,L[1]/LL,L[2]/LL];
+    var base=[224,212,184];
+    var Q=HOUSE.F.map(function(ids){
+      var pv=ids.map(function(i){return W[i];});
+      var ux=pv[1][0]-pv[0][0],uy=pv[1][1]-pv[0][1],uz=pv[1][2]-pv[0][2];
+      var vx=pv[2][0]-pv[0][0],vy=pv[2][1]-pv[0][1],vz=pv[2][2]-pv[0][2];
+      var nx=uy*vz-uz*vy, ny=uz*vx-ux*vz, nz=ux*vy-uy*vx, nl=Math.hypot(nx,ny,nz)||1;
+      var dot=Math.abs((nx*L[0]+ny*L[1]+nz*L[2])/nl), sh=0.42+0.56*dot;
+      var col='rgb('+Math.min(255,base[0]*sh|0)+','+Math.min(255,base[1]*sh|0)+','+Math.min(255,base[2]*sh|0)+')';
+      return {v:pv, fill:col};
+    });
+    var G=HOUSE.E.map(function(e){ return [W[e[0]], W[e[1]]]; });
+    var Xs=W.map(function(p){return p[0];}), hw=Math.max.apply(0,Xs.map(Math.abs));
+    return {Q:Q, G:G, mesh:1, halfW:hw, Zf:Z0-45, Zg:Z0, gaugeY:0, hh:Math.max.apply(0,W.map(function(p){return Math.abs(p[1]);})), Zback:Z0+45, name:'house'};
+  }
+  SCENES.house=buildHouse(0);
+  var cur='col';
+
+  // ---------- fixed framing per scene (union of D=0 and D=100 fits at Zp=200) ----------
+  function fitScene(S){
+    var save=[Zp,D], all=[];
+    [[200,0],[200,100]].forEach(function(pr){ Zp=pr[0]; D=pr[1];
+      S.Q.forEach(function(q){ q.v.forEach(function(p){ all.push(proj(p)); }); }); });
+    Zp=save[0]; D=save[1];
+    var xs=all.map(function(p){return p[0];}), ys=all.map(function(p){return p[1];});
+    return {x0:Math.min.apply(0,xs),x1:Math.max.apply(0,xs),y0:Math.min.apply(0,ys),y1:Math.max.apply(0,ys)};
+  }
+  var FITS={}; Object.keys(SCENES).forEach(function(k){ FITS[k]=fitScene(SCENES[k]); });
+  function txOf(k){ var f=FITS[k], pad=26, W=640, H=440;
+    var sc=Math.min((W-2*pad)/((f.x1-f.x0)||1),(H-2*pad)/((f.y1-f.y0)||1));
+    var mx=(f.x0+f.x1)/2,my=(f.y0+f.y1)/2;
+    return function(p){ return [W/2+(p[0]-mx)*sc, H/2-(p[1]-my)*sc]; }; }
+
+  // ---------- drawing ----------
+  var FILL={front:'#e4d7b6',back:'#d8cbac',wall:'#efe7d1',floor:'#ddd1b4',top:'#f6eed7',bot:'#b6a482',side:'#bfae86'};
+  function edgePath(tx,a,b){
+    if(Math.abs(a[2]-b[2])<1e-9){ var A=tx(proj(a)),B=tx(proj(b));
+      return 'L'+B[0].toFixed(1)+' '+B[1].toFixed(1); }
+    var s=''; for(var i=1;i<=10;i++){ var t=i/10, p=[a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t];
+      var Sp=tx(proj(p)); s+='L'+Sp[0].toFixed(1)+' '+Sp[1].toFixed(1); }
+    return s;
+  }
+  function quadPath(tx,q){
+    var A=tx(proj(q.v[0])), d='M'+A[0].toFixed(1)+' '+A[1].toFixed(1), n=q.v.length;
+    for(var i=0;i<n;i++) d+=edgePath(tx,q.v[i],q.v[(i+1)%n]);
+    return d+'Z';
+  }
+  function render(){
+    var S=SCENES[cur], tx=txOf(cur), c=centers();
+    var viewer=[0,0,Zp];
+    function avgz(q){ var z=0,n=q.v.length; for(var i=0;i<n;i++) z+=q.v[i][2]; return z/n; }
+    var s='';
+    if(S.mesh){
+      // baked mesh (the house plan): painter-sort all faces far -> near, then draw the wall lines on top
+      var faces=S.Q.map(function(q){ return {z:avgz(q), d:'<path d="'+quadPath(tx,q)+'" fill="'+q.fill+'" stroke="none"/>'}; });
+      faces.sort(function(a,b){ return b.z-a.z; });
+      faces.forEach(function(it){ s+=it.d; });
+      S.G.forEach(function(e){ var A=tx(proj(e[0]));
+        s+='<path d="M'+A[0].toFixed(1)+' '+A[1].toFixed(1)+edgePath(tx,e[0],e[1])+'" fill="none" stroke="#4a3b32" stroke-width="0.7"/>'; });
+    } else {
+    function faceFill(q){ return '<path d="'+quadPath(tx,q)+'" fill="'+(FILL[q.f]||'#e8dec6')+'" stroke="var(--ink)" stroke-width="0.9"/>'; }
+    // (1) the enclosing shell, painted far -> near
+    var shell=[]; S.Q.forEach(function(q){ if(!q.solid) shell.push({z:avgz(q), d:faceFill(q)}); });
+    shell.sort(function(a,b){ return b.z-a.z; });
+    shell.forEach(function(it){ s+=it.d; });
+    // (2) the grids that live on the shell
+    S.G.forEach(function(e){ var A=tx(proj(e[0]));
+      s+='<path d="M'+A[0].toFixed(1)+' '+A[1].toFixed(1)+edgePath(tx,e[0],e[1])+'" fill="none" stroke="#b3a486" stroke-width="0.55"/>'; });
+    // (3) solid masses LAST — back-face culled, so each is an opaque silhouette hiding the grid behind it
+    var solids=[]; S.Q.forEach(function(q){ if(q.solid){
+      var fx=(q.v[0][0]+q.v[1][0]+q.v[2][0]+q.v[3][0])/4, fy=(q.v[0][1]+q.v[1][1]+q.v[2][1]+q.v[3][1])/4, fz=avgz(q);
+      var dot=q.n[0]*(viewer[0]-fx)+q.n[1]*(viewer[1]-fy)+q.n[2]*(viewer[2]-fz);
+      if(dot>0) solids.push({z:fz, d:faceFill(q)}); } });
+    solids.sort(function(a,b){ return b.z-a.z; });
+    solids.forEach(function(it){ s+=it.d; });
+    }
+    // gauge square (frontal, at the scene's reference depth)
+    var g=30, Zg=S.Zg, gy=S.gaugeY;
+    var gs=[[-g,gy-g,Zg],[g,gy-g,Zg],[g,gy+g,Zg],[-g,gy+g,Zg]];
+    var d0=tx(proj(gs[0])), gp='M'+d0[0].toFixed(1)+' '+d0[1].toFixed(1);
+    for(var i=0;i<4;i++) gp+=edgePath(tx,gs[i],gs[(i+1)%4]);
+    s+='<path d="'+gp+'Z" fill="none" stroke="var(--blue)" stroke-width="1.6"/>';
+    document.getElementById('view').innerHTML=s;
+
+    // ---- readouts ----
+    var a=proj(gs[0]), b=proj(gs[1]), c2=proj(gs[2]);
+    var AR=Math.abs(b[0]-a[0])/Math.abs(c2[1]-b[1]);
+    var Zdec=(D===0)? null : c.x*c.y*(AR-1)/(AR*c.y-c.x);
+    var fov=2*Math.atan(S.halfW/(S.Zf-c.x))*180/Math.PI;
+    // splay vs perspective (marginal depth edge over the scene's own depth range)
+    var Zb2=S.Zback;
+    var sp=function(Zc){ return S.halfW*Zc*(Zb2-S.Zf)/((S.Zf-Zc)*(Zb2-Zc)); };
+    var splay=sp(c.x)/sp(Zp)*100;
+    // bow of the marginal depth edge
+    var P=[]; for(var i=0;i<=20;i++){ var z=S.Zf+(Zb2-S.Zf)*i/20; P.push(proj([S.halfW, S.hh, z])); }
+    var A2=P[0],B2=P[20],ux=B2[0]-A2[0],uy=B2[1]-A2[1],L=Math.hypot(ux,uy),sag=0;
+    P.forEach(function(q){ sag=Math.max(sag, Math.abs((q[0]-A2[0])*uy-(q[1]-A2[1])*ux)/L); });
+    var bow=sag/L*100;
+    document.getElementById('vD').textContent='D = '+D+(D===0?' · perspective':(D===100?' · cross-slit':' · hybrid'));
+    document.getElementById('vP').textContent='Zp = '+Zp;
+    document.getElementById('oProj').textContent = (D===0? 'perspective (one point)' : (D===100? 'cross-slit ('+c.x+' / '+c.y+')' : 'hybrid · slits '+c.x+' / '+c.y)) + (flip&&D>0? ' · flipped':'');
+    document.getElementById('oFov').textContent=fov.toFixed(0)+'°';
+    document.getElementById('oSplay').textContent=splay.toFixed(0)+'%';
+    document.getElementById('oBow').textContent=bow.toFixed(2)+'%';
+    document.getElementById('oAR').textContent=AR.toFixed(3);
+    document.getElementById('oZ').textContent= Zdec===null? '— (no gauge at D = 0)' : Zdec.toFixed(0)+'  ('+Zg+')';
+    var deep=(cur==='corr');
+    var msg, good;
+    if(D===0){ msg = deep? 'perspective on a deep scene: straight lines, unbounded depth cue — its home ground'
+                         : 'perspective on a broad scene: widen the FOV and the marginal splay grows — pull it apart';
+      good = deep; }
+    else if(flip){ msg = 'flipped: the vertical slit is now the far one — height is preserved and BREADTH pays ('+splay.toFixed(0)+'% splay). This orientation suits tall, shallow scenes; flip back for broad ones';
+      good = false; }
+    else { msg = deep? 'cross-slit on a deep scene: bow '+bow.toFixed(1)+'% and the far end saturating — this one belongs to perspective'
+                     : 'cross-slit on a broad shallow scene: splay cut to '+splay.toFixed(0)+'%, bow only '+bow.toFixed(1)+'%, and the gauge reads depth';
+      good = !deep; }
+    document.getElementById('oMsg').textContent=msg;
+    var bd=document.getElementById('oBadge'); bd.style.background=good?'var(--good)':'#b06a2f';
+    bd.textContent = good? 'matched ✓' : 'mismatched';
+  }
+
+  // ---------- controls ----------
+  var sD=document.getElementById('sD'), sP=document.getElementById('sP');
+  sD.addEventListener('input',function(){ D=+sD.value; render(); });
+  sP.addEventListener('input',function(){ Zp=+sP.value;
+    var maxD=2*(Zp-24); if(D>maxD){D=maxD; sD.value=D;} render(); });
+  [['scCol','col'],['scRoom','room'],['scSite','site'],['scCorr','corr'],['scHouse','house']].forEach(function(pr){
+    document.getElementById(pr[0]).addEventListener('click',function(){
+      cur=pr[1];
+      ['scCol','scRoom','scSite','scCorr','scHouse'].forEach(function(id){document.getElementById(id).classList.remove('on');});
+      this.classList.add('on'); render();
+    }); });
+  document.getElementById('bOrient').addEventListener('click',function(){
+    houseOrient=(houseOrient+1)&3; SCENES.house=buildHouse(houseOrient); FITS.house=fitScene(SCENES.house);
+    if(cur!=='house'){ cur='house'; ['scCol','scRoom','scSite','scCorr'].forEach(function(id){document.getElementById(id).classList.remove('on');}); document.getElementById('scHouse').classList.add('on'); }
+    render();
+  });
+  var bFlip=document.getElementById('bFlip');
+  bFlip.addEventListener('click',function(){ flip=!flip; this.classList.toggle('on',flip); render(); });
+  var bPull=document.getElementById('bPull');
+  bPull.addEventListener('click',function(){
+    var to=(D<50)?100:0, from=D, t0=Date.now(), dur=700;
+    bPull.classList.toggle('on', to===100);
+    var raf=(typeof requestAnimationFrame==='function')?requestAnimationFrame:null;
+    if(!raf){ D=to; sD.value=D; render(); return; }
+    (function step(){ var u=Math.min(1,(Date.now()-t0)/dur), e=u<0.5?2*u*u:1-Math.pow(-2*u+2,2)/2;
+      D=Math.round(from+(to-from)*e); sD.value=D; render(); if(u<1) raf(step); })();
+  });
+  render();
+})();
+</script>
+</body>
+</html>
